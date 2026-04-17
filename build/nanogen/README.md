@@ -141,7 +141,65 @@ From `build/nanogen/`:
 
     npm test
 
-Runs all 8 test files (parse_args, styles, request_builder,
-response_parser, http_retry, env, history, integration). All tests run
-offline — the HTTP suites use an in-process `node:http` mock server on
-`127.0.0.1`. Zero outbound requests during `npm test`.
+Runs all 9 test files (parse_args, styles, request_builder,
+response_parser, http_retry, env, history, integration,
+edit_multi_image). All tests run offline — the HTTP suites use an
+in-process `node:http` mock server on `127.0.0.1`. Zero outbound
+requests during `npm test`.
+
+## Edit mode
+
+Nanogen accepts up to **14** `--image` references per invocation. The
+first `--image` is the primary subject; subsequent images are style or
+composition references. Command-line order is preserved in the request
+body (`parts[1..N]` of `contents[0].parts`).
+
+    # Single-image edit with an explicit instruction
+    nanogen --image orig.png --prompt "add a rainbow" --output rainbow.png
+
+    # Multi-image composition (ordering matters — first is primary subject)
+    nanogen --image subject.png --image style-ref.png \
+            --prompt "apply the palette from the second image to the first" \
+            --output styled.png
+
+### `--region` (natural-language region guidance)
+
+`--region <description>` is repeatable and describes where in the image
+the edit should occur. It is **prose only** — Gemini has no bitmap mask
+parameter. `--region "the upper-left quadrant"` usually works;
+`--region "pixels 400-600 on X axis"` will not.
+
+    # Region edit without an explicit prompt (boilerplate base)
+    nanogen --image cat.png --region "replace the background with a beach" \
+            --output cat-beach.png
+
+When `--image` is given, `--prompt` becomes optional **if** `--region`
+is supplied. In that case the composed base text is the pinned string
+`"Edit the provided image(s)."`, followed by ` Region: <joined with "; ">.`.
+
+### Prompt composition order
+
+The composed prompt text is assembled deterministically:
+
+1. **Base.** Either `--prompt` verbatim, or (in edit-mode-no-prompt-with-region)
+   the pinned `"Edit the provided image(s)."` boilerplate.
+2. **Style** — ` Style: <frags joined by space>.` when `--style` is set.
+3. **Region** — ` Region: <regions joined by "; ">.` when `--region` is set.
+4. **Avoid** — ` Avoid: <negatives joined by "; ">.` when `--negative` is set.
+
+This order is pinned by golden tests; any refactor that reorders the
+suffix composition breaks `tests/test_edit_multi_image.cjs` loudly.
+
+### Edit-mode validation codes
+
+| Code | Meaning |
+|------|---------|
+| `E_REGION_WITHOUT_IMAGE` | `--region` set but no `--image` given. |
+| `E_EDIT_NEEDS_INSTRUCTION` | `--image` set but no `--prompt` and no `--region`. |
+
+Sub-plan 1's `E_MISSING_PROMPT_OR_IMAGE` still fires when BOTH
+`--prompt` AND `--image` are absent — the code name was chosen
+forward-compatibly so no rename is needed.
+
+`--history-continue` (multi-turn continuation) lands with sub-plan 2
+Phase 2; it is not yet wired.

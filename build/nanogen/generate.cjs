@@ -77,7 +77,7 @@ const STRING_FLAGS = new Set([
   "--history-id", "--history-parent",
 ]);
 const REPEATABLE_FLAGS = new Set([
-  "--image", "--negative", "--safety", "--style",
+  "--image", "--negative", "--safety", "--style", "--region",
 ]);
 const BOOLEAN_FLAGS = new Set([
   "--dry-run", "--no-history", "--help", "-h",
@@ -265,6 +265,7 @@ function parseArgs(argv) {
     negative: [],
     safety: [],
     image: [],
+    region: [],
     historyId: undefined,
     historyParent: undefined,
     noHistory: false,
@@ -320,6 +321,7 @@ function parseArgs(argv) {
         case "--negative": args.negative.push(val); break;
         case "--safety": args.safety.push(val); break;
         case "--style": args.styles.push(val); break;
+        case "--region": args.region.push(val); break;
       }
       continue;
     }
@@ -349,9 +351,29 @@ function validateArgs(args, stylesIndex) {
   if (args.dryRun && !args.output) {
     return fail("E_MISSING_OUTPUT", "--dry-run requires --output");
   }
-  // 2. --prompt missing (sub-plan 1: simple check)
-  if (!args.prompt) {
-    return fail("E_MISSING_PROMPT_OR_IMAGE", "--prompt is required");
+  // 22. --region set but --image absent (sub-plan 2). Evaluated BEFORE
+  // rule 2 so the more-specific region diagnostic wins when the user
+  // forgot only --image. Matrix code 22; evaluation priority is a
+  // deliberate deviation from strict numeric order and is pinned by tests.
+  if (args.region && args.region.length > 0 &&
+      (!args.image || args.image.length === 0)) {
+    return fail("E_REGION_WITHOUT_IMAGE",
+      "--region requires at least one --image");
+  }
+  // 2. --prompt missing AND --image absent (sub-plan 2 tightens the
+  // predicate; the code name was chosen forward-compatibly in sub-plan 1
+  // so no rename is needed).
+  if (!args.prompt && (!args.image || args.image.length === 0)) {
+    return fail("E_MISSING_PROMPT_OR_IMAGE",
+      "--prompt is required (or provide --image with --region/instruction)");
+  }
+  // 23. --image present but no --prompt AND no --region → model has
+  // nothing to do (sub-plan 2).
+  if (args.image && args.image.length > 0 &&
+      (!args.prompt) &&
+      (!args.region || args.region.length === 0)) {
+    return fail("E_EDIT_NEEDS_INSTRUCTION",
+      "--image requires --prompt or --region to describe the edit");
   }
   // 3. --output missing
   if (!args.output) {
@@ -529,7 +551,7 @@ function printHelp() {
     "Generate images via Google's Gemini Nano Banana models.",
     "",
     "Required flags:",
-    "  --prompt <str>           Text prompt for generation.",
+    "  --prompt <str>           Text prompt. Required unless --image + (--region or explicit edit instruction) provided.",
     "  --output <path>          Output file path. Ext ∈ {.png,.jpg,.jpeg,.webp}.",
     "",
     "Optional flags:",
@@ -554,6 +576,8 @@ function printHelp() {
     "                                       block_medium_and_above, block_low_and_above, off",
     "  --image <path>           Input image (repeatable, up to 14).",
     "                           Ext ∈ {.png,.jpg,.jpeg,.webp}.",
+    "  --region <description>   Natural-language region guidance (repeatable).",
+    "                           Requires --image. Prose only (no bitmap masks).",
     "  --history-id <str>       Override auto-derived history id.",
     "  --history-parent <str>   Link this generation to a parent entry.",
     "  --no-history             Skip history append.",
@@ -562,7 +586,10 @@ function printHelp() {
     "",
     "Examples:",
     "  nanogen --prompt \"a red apple on a marble table\" --output apple.png",
-    "  nanogen --prompt \"make it blue\" --image apple.png --output apple-blue.png  # (edit mode — see sub-plan 2)",
+    "",
+    "EDIT MODE (one or more --image; --prompt OR --region required):",
+    "  nanogen --image cat.png --region \"replace the background with a beach\" --output cat-beach.png",
+    "  nanogen --image orig.png --image ref.png --prompt \"apply the lighting from the second image to the first\" --output lit.png",
     "",
     "Get a key at https://aistudio.google.com/app/apikey; set GEMINI_API_KEY",
   ];
@@ -621,14 +648,32 @@ function readImageMaterials(args) {
 }
 
 // Compose the final prompt text per the plan's deterministic order:
-//   1. base prompt
+//   1. base text
+//        - In sub-plan 2 EDIT MODE (args.image.length > 0 AND
+//          args.prompt is empty/undefined AND args.region.length > 0)
+//          the base is the pinned boilerplate "Edit the provided image(s)."
+//          Goldens pin this exact string — do NOT reword.
+//        - Otherwise base = args.prompt || "".
 //   2. styles (applyStyles appends " Style: <frags joined by space>.")
-//   3. negative (" Avoid: <neg joined by '; '>.")
-// Pure — no I/O.
+//   3. region (" Region: <regions joined by '; '>.") — sub-plan 2
+//   4. negative (" Avoid: <neg joined by '; '>.")
+// Pure — no I/O. Composition order is load-bearing for request goldens;
+// any reorder breaks tests loudly.
 function composePromptText(args, stylesIndex) {
-  let promptText = args.prompt || "";
+  const hasImage = Array.isArray(args.image) && args.image.length > 0;
+  const hasRegion = Array.isArray(args.region) && args.region.length > 0;
+  const promptEmpty = !args.prompt;
+  let promptText;
+  if (hasImage && promptEmpty && hasRegion) {
+    promptText = "Edit the provided image(s).";
+  } else {
+    promptText = args.prompt || "";
+  }
   if (stylesIndex && args.styles && args.styles.length > 0) {
     promptText = applyStyles(promptText, args.styles, stylesIndex);
+  }
+  if (hasRegion) {
+    promptText = promptText + " Region: " + args.region.join("; ") + ".";
   }
   if (args.negative && args.negative.length > 0) {
     promptText = promptText + " Avoid: " + args.negative.join("; ") + ".";
