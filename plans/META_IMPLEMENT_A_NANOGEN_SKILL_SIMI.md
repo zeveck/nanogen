@@ -67,7 +67,7 @@ multi-provider abstraction, UI/GUI, auto-install of an API key.
 | Phase | Status | Commit | Notes |
 |-------|--------|--------|-------|
 | 1 — Implement SUB_1_CLI_CORE | ✅ Done | `6902e0d` | All 5 SUB_1 phases landed; `npm test` exit 0, 126 tests |
-| 2 — Implement SUB_2_EDIT_FLOW | ⬚ | | |
+| 2 — Implement SUB_2_EDIT_FLOW | ✅ Done | `b76a4cd` | All 3 SUB_2 phases landed; 164 tests green |
 | 3 — Implement SUB_3_SKILL_INSTALL | ⊘ | | Final sub-plan terminates in a user checkpoint — meta-plan must NOT auto-complete |
 
 ## Phase 1 — Implement: SUB_1 (Foundation CLI + Style Catalog + Tests)

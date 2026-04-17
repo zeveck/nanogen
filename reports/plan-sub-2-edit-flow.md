@@ -1,5 +1,44 @@
 # Plan Report — SUB_2_EDIT_FLOW
 
+**SUB_2 COMPLETE.** All 3 phases landed. `npm test` exit 0 with **164 tests** across 10 files. Plan frontmatter flipped to `status: complete`.
+
+## Phase — 3 Integration via Mock Server + README Polish
+
+**Plan:** plans/SUB_2_EDIT_FLOW.md
+**Status:** Done — **SUB_2 COMPLETE**
+**Commit:** `b76a4cd` on main
+**Landing mode:** direct-to-main
+
+### Work Items
+| # | Item | Status |
+|---|------|--------|
+| 1 | Two-call round-trip test (the key thoughtSignature correctness proof) | Done |
+| 2 | Multi-image edit inspection test | Done |
+| 3 | Continuation-refused-by-SAFETY test | Done |
+| 4 | Dry-run-performs-no-HTTP test | Done |
+| 5 | Mock server assertion-callback wrapper | Done |
+| 6 | `NANOGEN_MAX_RETRIES=0` used in integration tests | Done |
+| 7 | README polished to sub-plan-2-complete form (Examples, Limitations, Testing) | Done |
+
+### Verification
+- `cd build/nanogen && npm test` → exit 0
+- 10 test files: 30 + 21 + 14 + 21 + 13 + 12 + 9 + 10 + 18 + 16 = **164 passing**
+- thoughtSignature round-trip: mock asserts the sig is BYTE-IDENTICAL in the incoming continuation request; assertion failure → HTTP 500 + `MOCK ASSERT:` marker (`NANOGEN_MAX_RETRIES=0` surfaces immediately, not swallowed by retry)
+- Invocation 1's output file verified intact after invocation 2's refusal
+- Dry-run test asserts mock `attempts === 0`
+
+### Deviations
+- Shipped exactly 4 new tests (the ≥4 floor). Scope-matched to the four specified scenarios.
+- Extended existing `test_integration.cjs` rather than creating a new file — the mock-server harness was already there and splitting would duplicate ~120 lines.
+
+### Gaps
+None.
+
+### Next
+- **SUB_3 Phase 1** — author `SKILL.md` + `reference.md` in `build/nanogen/`. (Sub-plan 3 kicks off next cron tick.)
+
+---
+
 ## Phase — 2 `--history-continue` + Multi-Turn + thoughtSignature
 
 **Plan:** plans/SUB_2_EDIT_FLOW.md
