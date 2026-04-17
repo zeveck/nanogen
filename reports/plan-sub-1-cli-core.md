@@ -1,5 +1,45 @@
 # Plan Report — SUB_1_CLI_CORE
 
+## Phase — 2 Style Catalog (styles.json + loader + --style)
+
+**Plan:** plans/SUB_1_CLI_CORE.md
+**Status:** Done
+**Commit:** `9beb172` on main
+**Landing mode:** direct-to-main
+
+### Work Items
+| # | Item | Status |
+|---|------|--------|
+| 1 | `styles.json` with exactly 72 presets | Done |
+| 2 | Exactly 10 fixed categories | Done |
+| 3 | Every required slug present, neutral promptFragments | Done |
+| 4 | `loadStyles()` / `validateStyleCatalog()` / `applyStyles()` | Done |
+| 5 | Startup catalog validation BEFORE arg parsing | Done |
+| 6 | Validation Matrix rule 5b → `E_UNKNOWN_STYLE` | Done |
+| 7 | `--help` includes `--style` note | Done |
+| 8 | Request body composition via `applyStyles` | Done |
+| 9 | `tests/test_styles.cjs` with ≥14 tests | Done (21 tests) |
+| 10 | Forbidden-tokens policy enforced in validator + test | Done |
+
+### Verification
+- `node build/nanogen/tests/test_styles.cjs` → **21/21 passed**
+- Regression: `node build/nanogen/tests/test_parse_args.cjs` → **30/30 passed**
+- `styles.json` count: 72 presets, 10 distinct categories (verified)
+- All 13 forbidden tokens checked against live promptFragments — clean
+
+### Deviations
+- Shipped 21 tests (spec required ≥14) — added coverage for promptFragment length limits, empty-fragment, synthetic forbidden-token rejection, per-category counts, full slug inventory.
+- Added `NANOGEN_STYLES_PATH` test-only env override so tests can point the loader at malformed tmp catalogs. Documented inline; not in `--help` (same pattern as other `NANOGEN_*` hooks).
+- `validateArgs` accepts optional `stylesIndex`; rule 5b only fires when supplied. Preserves Phase 1 unit semantics.
+
+### Gaps
+None.
+
+### Next
+- **SUB_1 Phase 3** — Pure request builder + response parser with refusal detection + golden fixtures.
+
+---
+
 ## Phase — 1 Scaffold + Arg Parser + --help + --dry-run
 
 **Plan:** plans/SUB_1_CLI_CORE.md
