@@ -7,6 +7,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const magicBytes = require("./magicBytes.cjs");
 
 // ---------------------------------------------------------------------------
@@ -1171,6 +1172,152 @@ function mapHttpError(status, body) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 5 — History JSONL (append-only, best-effort) + ID derivation
+// ---------------------------------------------------------------------------
+//
+// History file: .nanogen-history.jsonl in the CALLER'S cwd. One JSON entry
+// per line, terminated by \n. We never rewrite prior lines.
+//
+// POSIX O_APPEND atomicity only applies to writes <= PIPE_BUF (4096 bytes on
+// Linux). A long thoughtSignature can push one entry past that, so truly
+// concurrent nanogen invocations in the same cwd may interleave bytes. We
+// do NOT introduce a lockfile by design — concurrent invocations are rare
+// and the tolerant reader below absorbs any interleave.
+//
+// On write failure (EACCES/EROFS/etc.) we return a {warning} from
+// appendHistory rather than fail the whole invocation.
+
+const HISTORY_FILE = ".nanogen-history.jsonl";
+
+// Derive a deterministic history id from --output. Same output path → same
+// id. Distinct paths that slugify to the same string get different ids
+// thanks to the sha-8 suffix (which hashes the ABSOLUTE path).
+function deriveHistoryId(args) {
+  if (args.historyId) return args.historyId;
+  const outputNoExt = path.basename(args.output, path.extname(args.output));
+  const slug = outputNoExt
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const sha = crypto.createHash("sha1")
+    .update(path.resolve(args.output))
+    .digest("hex")
+    .slice(0, 8);
+  return (slug.length > 0 ? slug + "-" : "") + sha;
+}
+
+// Best-effort append. Returns {ok: true} on success or
+// {warning: "..."} on EACCES/EROFS/etc — never throws.
+function appendHistory(entry, cwd) {
+  const dir = cwd || process.cwd();
+  const line = JSON.stringify(entry) + "\n";
+  try {
+    fs.appendFileSync(path.join(dir, HISTORY_FILE), line, { flag: "a" });
+    return { ok: true };
+  } catch (err) {
+    return {
+      warning: "could not append: " + (err && err.message || String(err)),
+    };
+  }
+}
+
+// Tolerant reader: missing file → []; malformed lines silently skipped.
+function readHistory(cwd) {
+  const dir = cwd || process.cwd();
+  const p = path.join(dir, HISTORY_FILE);
+  let txt;
+  try {
+    txt = fs.readFileSync(p, "utf8");
+  } catch (_) {
+    return [];
+  }
+  const out = [];
+  for (const line of txt.split("\n")) {
+    if (!line) continue;
+    try {
+      out.push(JSON.parse(line));
+    } catch (_) {
+      // Skip malformed line — interleaved writes or legacy formats.
+    }
+  }
+  return out;
+}
+
+// Build a history entry. `composedPrompt` is what was actually sent
+// (post-style/post-negative). `responseMimeType` comes from parseResponse
+// (may be null on refusal). `bytesWritten` is the size of the output file
+// on disk (0 on refusal).
+function buildHistoryEntry(args, composedPrompt, parsed, bytesWritten) {
+  const declaredExt = path.extname(args.output || "").slice(1).toLowerCase();
+  // Map the actual API MIME type to a canonical format name.
+  const mimeToFmt = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/webp": "webp",
+  };
+  let outputFormat = null;
+  if (parsed && parsed.image && parsed.responseMimeType &&
+      mimeToFmt[parsed.responseMimeType]) {
+    outputFormat = mimeToFmt[parsed.responseMimeType];
+  }
+  const entry = {
+    id: deriveHistoryId(args),
+    timestamp: new Date().toISOString(),
+    prompt: composedPrompt,
+    output: args.output,
+    params: {
+      model: args.model || DEFAULT_MODEL,
+      aspectRatio: args.aspect || DEFAULT_ASPECT,
+      imageSize: args.size || DEFAULT_SIZE,
+      thinkingLevel: args.thinking !== undefined ? args.thinking : null,
+      seed: args.seed !== undefined ? Number(args.seed) : null,
+      temperature: args.temperature !== undefined ? Number(args.temperature) : null,
+      styles: Array.isArray(args.styles) ? args.styles.slice() : [],
+    },
+    parentId: args.historyParent || null,
+    bytes: bytesWritten,
+    outputFormat,
+    outputExtension: declaredExt || null,
+    refusalReason: parsed && parsed.refusalReason ? parsed.refusalReason : null,
+    thoughtSignature: parsed && parsed.thoughtSignature
+      ? parsed.thoughtSignature : null,
+  };
+  if (Array.isArray(args.image) && args.image.length > 0) {
+    entry.inputImages = args.image.slice();
+  }
+  return entry;
+}
+
+// Emit the pinned stderr warning when --history-parent does not match any
+// existing history id. We do NOT fail the invocation.
+function warnIfUnknownParent(args, cwd) {
+  if (!args.historyParent) return;
+  const entries = readHistory(cwd);
+  const match = entries.some((e) =>
+    e && typeof e.id === "string" && (
+      e.id === args.historyParent ||
+      e.id.startsWith(args.historyParent)
+    )
+  );
+  if (!match) {
+    process.stderr.write(
+      `nanogen: --history-parent "${args.historyParent}" not found in .nanogen-history.jsonl; continuing anyway.\n`
+    );
+  }
+}
+
+// Map a declared file extension to its canonical format name for comparison
+// with the API's returned mimeType. ".jpg" normalizes to "jpeg".
+function normalizedExtFormat(ext) {
+  const e = (ext || "").toLowerCase();
+  if (e === "jpg" || e === "jpeg") return "jpeg";
+  if (e === "png") return "png";
+  if (e === "webp") return "webp";
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Output contract
 // ---------------------------------------------------------------------------
 
@@ -1342,8 +1489,24 @@ async function runHttpFlow(args, stylesIndex) {
   }
 
   const parsed = parseResponse(json);
+  const composedPrompt = composePromptText(args, stylesIndex);
+  const historyId = deriveHistoryId(args);
+  const cwd = process.cwd();
+
+  // Warn once if --history-parent is unknown — BEFORE appending our own
+  // entry, so the parent check can only see pre-existing lines.
+  if (!args.noHistory) warnIfUnknownParent(args, cwd);
+
   if (parsed.refusalReason) {
-    process.stdout.write(JSON.stringify({
+    // Refusal: do NOT write the output file. Still record the attempt
+    // (with refusalReason + bytes: 0) in history unless --no-history.
+    let historyWarning = null;
+    if (!args.noHistory) {
+      const entry = buildHistoryEntry(args, composedPrompt, parsed, 0);
+      const r = appendHistory(entry, cwd);
+      if (r.warning) historyWarning = r.warning;
+    }
+    const payload = {
       success: false,
       code: "E_REFUSED",
       error: parsed.refusalReason,
@@ -1352,20 +1515,65 @@ async function runHttpFlow(args, stylesIndex) {
         promptBlockReason: parsed.promptBlockReason,
         text: parsed.text,
       },
-    }) + "\n");
+    };
+    if (historyWarning) payload.historyWarning = historyWarning;
+    process.stdout.write(JSON.stringify(payload) + "\n");
     return 1;
   }
 
-  // Phase 4 emits a minimal success JSON; Phase 5 will extend this to
-  // write the output file and append history.
-  process.stdout.write(JSON.stringify({
+  // Success path. parseResponse guarantees parsed.image is a valid Buffer
+  // whose magic bytes match a supported format, so writeFileSync is safe.
+  try {
+    fs.mkdirSync(path.dirname(path.resolve(args.output)), { recursive: true });
+    fs.writeFileSync(args.output, parsed.image);
+  } catch (err) {
+    emitError("E_UNEXPECTED_HTTP",
+      "failed to write output: " + (err && err.message || String(err)));
+    return 1;
+  }
+
+  // Extension-vs-returned-MIME mismatch warning. We pass through the bytes
+  // as-is regardless — renaming or transcoding would be surprising.
+  const mimeToFmt = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/webp": "webp",
+  };
+  const actualFmt = mimeToFmt[parsed.responseMimeType] || null;
+  const declaredExt = path.extname(args.output).slice(1).toLowerCase();
+  const normalizedExt = normalizedExtFormat(declaredExt);
+  if (actualFmt && normalizedExt && actualFmt !== normalizedExt) {
+    process.stderr.write(
+      `nanogen: output extension ".${declaredExt}" but API returned image/${actualFmt}; bytes written as-is.\n`
+    );
+  }
+
+  let bytesWritten = 0;
+  try {
+    bytesWritten = fs.statSync(args.output).size;
+  } catch (_) {
+    bytesWritten = parsed.image ? parsed.image.length : 0;
+  }
+
+  let historyWarning = null;
+  if (!args.noHistory) {
+    const entry = buildHistoryEntry(args, composedPrompt, parsed, bytesWritten);
+    const r = appendHistory(entry, cwd);
+    if (r.warning) historyWarning = r.warning;
+  }
+
+  const payload = {
     success: true,
+    output: args.output,
+    historyId,
+    bytes: bytesWritten,
     model: args.model || DEFAULT_MODEL,
     aspectRatio: args.aspect || DEFAULT_ASPECT,
     imageSize: args.size || DEFAULT_SIZE,
-    refusalReason: parsed.refusalReason,
-    bytes: parsed.image ? parsed.image.length : 0,
-  }) + "\n");
+    refusalReason: null,
+  };
+  if (historyWarning) payload.historyWarning = historyWarning;
+  process.stdout.write(JSON.stringify(payload) + "\n");
   return 0;
 }
 
@@ -1397,6 +1605,13 @@ module.exports = {
   BodyParseError,
   HttpRetryError,
   NetworkRetryError,
+  // Phase 5:
+  appendHistory,
+  readHistory,
+  buildHistoryEntry,
+  deriveHistoryId,
+  normalizedExtFormat,
+  HISTORY_FILE,
 };
 
 if (require.main === module) {
