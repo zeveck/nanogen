@@ -37,7 +37,7 @@ execution so SKILL.md and reference.md reflect the actual CLI.
 | Phase | Status | Commit | Notes |
 |-------|--------|--------|-------|
 | 1 — Author SKILL.md + reference.md in `build/nanogen/` | ✅ Done | `716e0b4` | 4 doc-lint tests; 72 slugs in catalog; forbidden-tokens clean; aggregate 168 |
-| 2 — Install `build/nanogen/` → `.claude/skills/nanogen/` | ⬚ | | |
+| 2 — Install `build/nanogen/` → `.claude/skills/nanogen/` | ✅ Done | `542b24f` | Installed via `cp -r`; `tools/` excluded; npm test from installed location: 168/168; /nanogen appears in skill list |
 | 3 — API-key setup doc + USER CHECKPOINT (plan stops here) | ⊘ | | Awaiting user verification — do NOT mark Done. |
 
 ## Phase 1 — Author SKILL.md + reference.md (under `build/nanogen/`)
