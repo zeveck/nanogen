@@ -5,6 +5,6 @@
   "type": "commonjs",
   "engines": { "node": ">=20.12" },
   "scripts": {
-    "test": "node tests/test_parse_args.cjs && node tests/test_styles.cjs && node tests/test_request_builder.cjs && node tests/test_response_parser.cjs && node tests/test_http_retry.cjs && node tests/test_env.cjs && node tests/test_history.cjs && node tests/test_integration.cjs && node tests/test_edit_multi_image.cjs && node tests/test_multi_turn.cjs"
+    "test": "node tests/test_parse_args.cjs && node tests/test_styles.cjs && node tests/test_request_builder.cjs && node tests/test_response_parser.cjs && node tests/test_http_retry.cjs && node tests/test_env.cjs && node tests/test_history.cjs && node tests/test_integration.cjs && node tests/test_edit_multi_image.cjs && node tests/test_multi_turn.cjs && node tests/test_docs_lint.cjs"
   }
 }
