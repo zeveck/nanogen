@@ -38,6 +38,7 @@ Before running set your API key:
 | `--image <path>` | string (repeatable, max 14) | — | Ext in `{.png,.jpg,.jpeg,.webp}`, non-empty, <= 15 MB raw, magic bytes match declared extension. |
 | `--history-id <str>` | string | auto | Override auto-derived id (see History below). |
 | `--history-parent <str>` | string | — | Links this generation to a previous entry. Unknown id → warning (no failure). |
+| `--history-continue <id>` | string | — | Continue a prior generation as a multi-turn edit. Round-trips the prior `thoughtSignature`. Mutually exclusive with `--history-parent`. See [Multi-turn continuation](#multi-turn-continuation). |
 | `--no-history` | flag | false | Skip `.nanogen-history.jsonl` append. |
 | `--dry-run` | flag | false | Print would-be request body as JSON and exit 0. Does NOT require a key. |
 | `--help, -h` | flag | — | Print help and exit 0. |
@@ -141,10 +142,10 @@ From `build/nanogen/`:
 
     npm test
 
-Runs all 9 test files (parse_args, styles, request_builder,
+Runs all 10 test files (parse_args, styles, request_builder,
 response_parser, http_retry, env, history, integration,
-edit_multi_image). All tests run offline — the HTTP suites use an
-in-process `node:http` mock server on `127.0.0.1`. Zero outbound
+edit_multi_image, multi_turn). All tests run offline — the HTTP suites
+use an in-process `node:http` mock server on `127.0.0.1`. Zero outbound
 requests during `npm test`.
 
 ## Edit mode
@@ -201,5 +202,60 @@ Sub-plan 1's `E_MISSING_PROMPT_OR_IMAGE` still fires when BOTH
 `--prompt` AND `--image` are absent — the code name was chosen
 forward-compatibly so no rename is needed.
 
-`--history-continue` (multi-turn continuation) lands with sub-plan 2
-Phase 2; it is not yet wired.
+### Multi-turn continuation
+
+`--history-continue <id>` re-sends a prior generation as the first turn
+of a two-turn conversation, letting the model refine its own previous
+output. The flag accepts a history id (exact match — no prefix search,
+because an ambiguous continuation would round-trip the wrong
+`thoughtSignature` and Gemini would 400 with a confusing message).
+
+    # First, generate a cat.
+    nanogen --prompt "cat" --output cat.png
+    #  → { "success": true, "historyId": "cat-abc12345", ... }
+
+    # Then refine it, automatically round-tripping the prior thoughtSignature.
+    nanogen --history-continue cat-abc12345 \
+            --prompt "add a hat" \
+            --output cat-hat.png
+
+Under the hood, nanogen assembles a three-turn `contents` array:
+
+1. `role: "user"` — the prior entry's `prompt` text (only; prior user
+   images are NOT replayed — the model's output already reflects them).
+2. `role: "model"` — the prior output image (base64 inline) **plus** the
+   prior `thoughtSignature` verbatim. This is the critical Gemini-3
+   gotcha: the signature must be byte-for-byte identical to what the
+   API returned, or the next call 400s.
+3. `role: "user"` — the current invocation's composed prompt (including
+   `--style`/`--region`/`--negative` suffixes) and any current-turn
+   `--image` references in order.
+
+Continuation is **exactly one step deep**. Longer chains happen by
+running `/nanogen` repeatedly, each invocation `--history-continue`-ing
+the prior entry.
+
+### Multi-turn validation codes
+
+| Code | Meaning |
+|------|---------|
+| `E_CONTINUE_WITH_PARENT` | Both `--history-continue` and `--history-parent` given. `--history-continue` already implies a parent relationship. |
+| `E_CONTINUE_UNKNOWN_ID` | The id is not in `.nanogen-history.jsonl` (exact match only). |
+| `E_CONTINUE_REFUSED_ENTRY` | The prior entry was refused (`refusalReason` non-null). No image + no signature → not continuable. |
+| `E_CONTINUE_NO_SIGNATURE` | The prior entry has `thoughtSignature: null` (legacy row, or non-Gemini-3 model). |
+| `E_CONTINUE_MISSING_OUTPUT` | The file path in the prior entry's `output` field no longer exists on disk. |
+| `E_CONTINUE_UNKNOWN_MIME` | The prior entry's `outputFormat` is missing/unknown AND a magic-byte probe on the bytes cannot identify the format. |
+
+### Model mismatch warning
+
+If the prior entry's model differs from the current `--model`, nanogen
+continues but emits a pinned stderr warning:
+
+    nanogen: --history-continue source used model "<A>"; continuing with model "<B>". Gemini may 400 on thoughtSignature format mismatch.
+
+The warning does NOT block the request; model switches mid-conversation
+are technically allowed but almost always produce 400 on signature
+format mismatch.
+
+Sub-plan 2 Phase 3 adds an end-to-end integration test demonstrating
+the round-trip against the in-process mock server.

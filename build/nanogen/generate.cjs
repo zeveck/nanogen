@@ -74,7 +74,7 @@ const SAFETY_THRESHOLD_ALIASES = {
 const STRING_FLAGS = new Set([
   "--prompt", "--output", "--model", "--aspect", "--size",
   "--thinking", "--seed", "--temperature",
-  "--history-id", "--history-parent",
+  "--history-id", "--history-parent", "--history-continue",
 ]);
 const REPEATABLE_FLAGS = new Set([
   "--image", "--negative", "--safety", "--style", "--region",
@@ -268,6 +268,7 @@ function parseArgs(argv) {
     region: [],
     historyId: undefined,
     historyParent: undefined,
+    historyContinue: undefined,
     noHistory: false,
     dryRun: false,
     help: false,
@@ -310,6 +311,7 @@ function parseArgs(argv) {
         case "--temperature": args.temperature = val; break;
         case "--history-id": args.historyId = val; break;
         case "--history-parent": args.historyParent = val; break;
+        case "--history-continue": args.historyContinue = val; break;
       }
       continue;
     }
@@ -351,24 +353,54 @@ function validateArgs(args, stylesIndex) {
   if (args.dryRun && !args.output) {
     return fail("E_MISSING_OUTPUT", "--dry-run requires --output");
   }
+  // 24. --history-continue and --history-parent mutually exclusive
+  // (sub-plan 2 Phase 2). Evaluated early so the relationship-conflict
+  // diagnostic wins over downstream prompt/image/region checks. Matrix
+  // code 24; numeric position is flexible but short-circuit order
+  // matters — it runs BEFORE E_MISSING_PROMPT_OR_IMAGE so a user
+  // continuing a prior turn with --history-continue (which legitimately
+  // may omit --prompt) is not told "prompt missing".
+  if (args.historyContinue !== undefined && args.historyParent !== undefined) {
+    return fail("E_CONTINUE_WITH_PARENT",
+      "--history-continue implies a parent relationship; do not also specify --history-parent.");
+  }
+  // In continuation mode (--history-continue set), the prior entry's
+  // output image is implicitly the "image" for this turn. Rules 22/2/23
+  // therefore relax: --region is allowed without --image (prior image
+  // satisfies it), --prompt is allowed without --image, and a bare
+  // --history-continue with --prompt or --region is sufficient. We still
+  // require SOME instruction (--prompt or --region) for continuation —
+  // otherwise the current user turn would be empty, which Gemini 400s.
+  const inContinuation = args.historyContinue !== undefined;
   // 22. --region set but --image absent (sub-plan 2). Evaluated BEFORE
   // rule 2 so the more-specific region diagnostic wins when the user
   // forgot only --image. Matrix code 22; evaluation priority is a
   // deliberate deviation from strict numeric order and is pinned by tests.
-  if (args.region && args.region.length > 0 &&
+  // Skipped in continuation mode — the prior model-turn image acts as
+  // the image the region refers to.
+  if (!inContinuation &&
+      args.region && args.region.length > 0 &&
       (!args.image || args.image.length === 0)) {
     return fail("E_REGION_WITHOUT_IMAGE",
       "--region requires at least one --image");
   }
   // 2. --prompt missing AND --image absent (sub-plan 2 tightens the
   // predicate; the code name was chosen forward-compatibly in sub-plan 1
-  // so no rename is needed).
-  if (!args.prompt && (!args.image || args.image.length === 0)) {
+  // so no rename is needed). In continuation mode we accept --prompt OR
+  // --region as the instruction and do not require --image.
+  if (inContinuation) {
+    if (!args.prompt &&
+        (!args.region || args.region.length === 0)) {
+      return fail("E_EDIT_NEEDS_INSTRUCTION",
+        "--history-continue requires --prompt or --region to describe the next turn");
+    }
+  } else if (!args.prompt && (!args.image || args.image.length === 0)) {
     return fail("E_MISSING_PROMPT_OR_IMAGE",
       "--prompt is required (or provide --image with --region/instruction)");
   }
   // 23. --image present but no --prompt AND no --region → model has
-  // nothing to do (sub-plan 2).
+  // nothing to do (sub-plan 2). Still applies in continuation mode when
+  // the user adds current-turn --image references.
   if (args.image && args.image.length > 0 &&
       (!args.prompt) &&
       (!args.region || args.region.length === 0)) {
@@ -580,6 +612,10 @@ function printHelp() {
     "                           Requires --image. Prose only (no bitmap masks).",
     "  --history-id <str>       Override auto-derived history id.",
     "  --history-parent <str>   Link this generation to a parent entry.",
+    "  --history-continue <id>  Continue an earlier generation as a",
+    "                           multi-turn edit (round-trips the prior",
+    "                           thoughtSignature). Mutually exclusive",
+    "                           with --history-parent.",
     "  --no-history             Skip history append.",
     "  --dry-run                Print would-be request as JSON, exit 0.",
     "  --help, -h               Show this help.",
@@ -662,9 +698,17 @@ function readImageMaterials(args) {
 function composePromptText(args, stylesIndex) {
   const hasImage = Array.isArray(args.image) && args.image.length > 0;
   const hasRegion = Array.isArray(args.region) && args.region.length > 0;
+  const hasContinuation = args.historyContinue !== undefined &&
+                          args.historyContinue !== null;
   const promptEmpty = !args.prompt;
   let promptText;
-  if (hasImage && promptEmpty && hasRegion) {
+  // Edit-mode boilerplate when: there IS an implicit image (either
+  // current --image OR a prior model-turn image via --history-continue)
+  // AND no explicit --prompt AND a --region instruction. Sub-plan 2
+  // Phase 1 defines this for --image; Phase 2 extends it to continuation
+  // so "--history-continue X --region Y" composes coherent text rather
+  // than the accidental " Region: Y." with a leading space.
+  if ((hasImage || hasContinuation) && promptEmpty && hasRegion) {
     promptText = "Edit the provided image(s).";
   } else {
     promptText = args.prompt || "";
@@ -762,6 +806,189 @@ function buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex) {
   };
 
   // safetySettings: OMIT entirely when no --safety flag. NEVER emit [].
+  if (args.safety && args.safety.length > 0) {
+    body.safetySettings = canonicalSafetySettings(args.safety);
+  }
+
+  return { url, headers, body };
+}
+
+// ---------------------------------------------------------------------------
+// Sub-plan 2 Phase 2 — --history-continue (multi-turn + thoughtSignature)
+// ---------------------------------------------------------------------------
+//
+// resolveContinuation(args, cwd) — I/O wrapper. Loads history, locates the
+// entry matching args.historyContinue, reads the prior output bytes from
+// disk, maps the MIME, and emits a pinned stderr warning on model
+// mismatch. Returns {priorEntry, priorBytes, priorMime} OR
+// {code, error} on any of the six E_CONTINUE_* failure paths.
+//
+// buildContinuationRequestFromMaterials(args, imageMaterials, stylesIndex,
+//   priorEntry, priorBytes, priorMime) — PURE. Assembles the 3-turn
+// {role:user, role:model, role:user} contents body, round-tripping
+// priorEntry.thoughtSignature verbatim.
+
+// Map from history-row outputFormat string to MIME. History rows record
+// the FORMAT only (one of "png"/"jpeg"/"webp"), derived from the API's
+// returned mimeType at write time.
+const OUTPUT_FORMAT_TO_MIME = {
+  "png": "image/png",
+  "jpeg": "image/jpeg",
+  "webp": "image/webp",
+};
+
+function resolveContinuation(args, cwd) {
+  // 1. Load history (tolerant reader).
+  const entries = readHistory(cwd);
+  // 2. Exact-match lookup. We deliberately do NOT prefix-match here
+  // (unlike --history-parent): an ambiguous continuation would round-trip
+  // the wrong thoughtSignature and the model would 400 in a confusing way.
+  let priorEntry = null;
+  for (const e of entries) {
+    if (e && typeof e.id === "string" && e.id === args.historyContinue) {
+      priorEntry = e;
+      break;
+    }
+  }
+  if (!priorEntry) {
+    return fail("E_CONTINUE_UNKNOWN_ID",
+      `--history-continue id "${args.historyContinue}" not found in .nanogen-history.jsonl`);
+  }
+  // 3. Refused entries have no signature and often no valid image — cannot continue.
+  if (priorEntry.refusalReason !== null && priorEntry.refusalReason !== undefined) {
+    return fail("E_CONTINUE_REFUSED_ENTRY",
+      `--history-continue entry "${priorEntry.id}" was refused (${priorEntry.refusalReason}); cannot continue`);
+  }
+  // 4. No thoughtSignature on prior entry → cannot round-trip a sig.
+  if (priorEntry.thoughtSignature === null || priorEntry.thoughtSignature === undefined) {
+    return fail("E_CONTINUE_NO_SIGNATURE",
+      `--history-continue entry "${priorEntry.id}" has no thoughtSignature; cannot continue (pre-Gemini-3 or non-continuable response)`);
+  }
+  // 5. Read the prior output file. History stores output as the path the
+  // user gave; we resolve relative to cwd here (matching how appendHistory
+  // ran).
+  const outPath = path.isAbsolute(priorEntry.output)
+    ? priorEntry.output
+    : path.join(cwd || process.cwd(), priorEntry.output);
+  let priorBytes;
+  try {
+    priorBytes = fs.readFileSync(outPath);
+  } catch (err) {
+    return fail("E_CONTINUE_MISSING_OUTPUT",
+      `--history-continue output file "${priorEntry.output}" is missing or unreadable: ${err && err.message || String(err)}`);
+  }
+  // 6. MIME resolution: outputFormat map, then magic-byte fallback.
+  let priorMime = null;
+  if (priorEntry.outputFormat && OUTPUT_FORMAT_TO_MIME[priorEntry.outputFormat]) {
+    priorMime = OUTPUT_FORMAT_TO_MIME[priorEntry.outputFormat];
+  } else {
+    const kind = magicBytes.detectMagic(priorBytes);
+    if (kind && OUTPUT_FORMAT_TO_MIME[kind]) {
+      priorMime = OUTPUT_FORMAT_TO_MIME[kind];
+    }
+  }
+  if (!priorMime) {
+    return fail("E_CONTINUE_UNKNOWN_MIME",
+      `--history-continue entry "${priorEntry.id}" has unknown outputFormat and magic-byte probe did not identify the bytes`);
+  }
+  // 7. Model mismatch → pinned stderr warning (does NOT block).
+  const priorModel = (priorEntry.params && priorEntry.params.model) || null;
+  const currentModel = args.model || DEFAULT_MODEL;
+  if (priorModel && priorModel !== currentModel) {
+    process.stderr.write(
+      `nanogen: --history-continue source used model "${priorModel}"; continuing with model "${currentModel}". Gemini may 400 on thoughtSignature format mismatch.\n`
+    );
+  }
+  return { ok: true, priorEntry, priorBytes, priorMime };
+}
+
+// PURE. Builds the 3-turn continuation {url, headers, body}. Same generationConfig
+// and safetySettings rules as single-turn. No filesystem I/O.
+//
+// Shape (load-bearing — pinned by goldens):
+//   contents[0] = { role: "user",  parts: [ { text: priorEntry.prompt } ] }
+//   contents[1] = { role: "model", parts: [ inlineData(priorBytes),
+//                                            { thoughtSignature } ] }
+//   contents[2] = { role: "user",  parts: [ { text: composedCurrent },
+//                                            ...current inlineData... ] }
+//
+// We do NOT replay prior user images: the model's output already reflects
+// them. This is documented in the sub-plan 2 Design & Constraints.
+function buildContinuationRequestFromMaterials(
+  args, imageMaterials, stylesIndex, priorEntry, priorBytes, priorMime
+) {
+  const base = process.env.NANOGEN_API_BASE ||
+               "https://generativelanguage.googleapis.com";
+  const model = args.model || DEFAULT_MODEL;
+  const url = `${base}/v1beta/models/${model}:generateContent`;
+
+  const headers = {
+    "x-goog-api-key": "<resolved-at-send-time>",
+    "Content-Type": "application/json",
+  };
+
+  // Turn 1 (historical user). We reconstruct the prior user turn with
+  // JUST its prompt text. Prior user images are NOT replayed — see
+  // Design & Constraints in SUB_2_EDIT_FLOW.md.
+  const userTurn1 = {
+    role: "user",
+    parts: [{ text: priorEntry.prompt || "" }],
+  };
+
+  // Turn 2 (historical model). inlineData (prior output bytes) +
+  // thoughtSignature verbatim. This is the critical Gemini-3 gotcha:
+  // the sig must be byte-for-byte identical to what the API returned.
+  const modelTurn = {
+    role: "model",
+    parts: [
+      {
+        inlineData: {
+          mimeType: priorMime,
+          data: priorBytes.toString("base64"),
+        },
+      },
+      { thoughtSignature: priorEntry.thoughtSignature },
+    ],
+  };
+
+  // Turn 3 (current user). Composed prompt (current --prompt/--style/
+  // --region/--negative) + current-turn inlineData parts in order.
+  const currentText = composePromptText(args, stylesIndex);
+  const currentParts = [{ text: currentText }];
+  if (imageMaterials && imageMaterials.length > 0) {
+    for (const m of imageMaterials) {
+      currentParts.push({
+        inlineData: {
+          mimeType: m.mimeType,
+          data: m.buffer.toString("base64"),
+        },
+      });
+    }
+  }
+  const userTurn2 = { role: "user", parts: currentParts };
+
+  const generationConfig = {
+    responseModalities: ["IMAGE"],
+    imageConfig: {
+      aspectRatio: args.aspect || DEFAULT_ASPECT,
+      imageSize: args.size || DEFAULT_SIZE,
+    },
+    candidateCount: 1,
+  };
+  if (args.thinking !== undefined) {
+    generationConfig.thinkingConfig = { thinkingLevel: args.thinking };
+  }
+  if (args.seed !== undefined) {
+    generationConfig.seed = Number(args.seed);
+  }
+  if (args.temperature !== undefined) {
+    generationConfig.temperature = Number(args.temperature);
+  }
+
+  const body = {
+    contents: [userTurn1, modelTurn, userTurn2],
+    generationConfig,
+  };
   if (args.safety && args.safety.length > 0) {
     body.safetySettings = canonicalSafetySettings(args.safety);
   }
@@ -1431,9 +1658,25 @@ function main() {
       emitError("E_IMAGE_NOT_FOUND", String(e && e.message || e));
       process.exit(1);
     }
-    const { url, headers, body } =
-      buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex);
-    emitDryRun(url, headers, body);
+    // ONE decision point (sub-plan 2 Phase 2): --history-continue swaps
+    // in the 3-turn continuation builder. All downstream flow (emit,
+    // success JSON, history append) is the same. resolveContinuation is
+    // also invoked in the HTTP path at runHttpFlow.
+    let req;
+    if (args.historyContinue !== undefined) {
+      const resolved = resolveContinuation(args, process.cwd());
+      if (!resolved.ok) {
+        emitError(resolved.code, resolved.error);
+        process.exit(1);
+      }
+      req = buildContinuationRequestFromMaterials(
+        args, imageMaterials, stylesIndex,
+        resolved.priorEntry, resolved.priorBytes, resolved.priorMime
+      );
+    } else {
+      req = buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex);
+    }
+    emitDryRun(req.url, req.headers, req.body);
     process.exit(0);
   }
 
@@ -1469,8 +1712,27 @@ async function runHttpFlow(args, stylesIndex) {
     emitError("E_IMAGE_NOT_FOUND", String(e && e.message || e));
     return 1;
   }
-  const { url, headers, body } =
-    buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex);
+  // ONE decision point (sub-plan 2 Phase 2): --history-continue selects
+  // the 3-turn continuation builder. Everything else (send, parse,
+  // write, history) is unchanged.
+  let url, headers, body;
+  let continuationParentId = null;
+  if (args.historyContinue !== undefined) {
+    const resolved = resolveContinuation(args, process.cwd());
+    if (!resolved.ok) {
+      emitError(resolved.code, resolved.error);
+      return 1;
+    }
+    const r = buildContinuationRequestFromMaterials(
+      args, imageMaterials, stylesIndex,
+      resolved.priorEntry, resolved.priorBytes, resolved.priorMime
+    );
+    url = r.url; headers = r.headers; body = r.body;
+    continuationParentId = resolved.priorEntry.id;
+  } else {
+    const r = buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex);
+    url = r.url; headers = r.headers; body = r.body;
+  }
 
   // 3. Replace the pure builder's placeholder with the real key.
   const realHeaders = Object.assign({}, headers, {
@@ -1537,6 +1799,11 @@ async function runHttpFlow(args, stylesIndex) {
   const composedPrompt = composePromptText(args, stylesIndex);
   const historyId = deriveHistoryId(args);
   const cwd = process.cwd();
+  // In continuation mode, the prior entry's id becomes this entry's
+  // parentId. Validation already guarantees args.historyParent is unset.
+  if (continuationParentId !== null) {
+    args.historyParent = continuationParentId;
+  }
 
   // Warn once if --history-parent is unknown — BEFORE appending our own
   // entry, so the parent check can only see pre-existing lines.
@@ -1657,6 +1924,10 @@ module.exports = {
   deriveHistoryId,
   normalizedExtFormat,
   HISTORY_FILE,
+  // Sub-plan 2 Phase 2:
+  resolveContinuation,
+  buildContinuationRequestFromMaterials,
+  OUTPUT_FORMAT_TO_MIME,
 };
 
 if (require.main === module) {
