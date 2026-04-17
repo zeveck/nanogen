@@ -5,3 +5,10 @@
 # API key — never commit. /nanogen (and many other tools) reads
 # GEMINI_API_KEY from a local .env file at the repo root.
 .env
+
+# Worktree-landing markers (zskills convention). These belong INSIDE a
+# worktree path where cleanup tools read them to decide whether a
+# worktree's commits have been cherry-picked to main. A .landed at the
+# repo root is a misapplication of the convention — but ignoring here
+# prevents accidental commits in case something writes one.
+.landed
