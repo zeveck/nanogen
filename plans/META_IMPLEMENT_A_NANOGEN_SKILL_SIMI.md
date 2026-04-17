@@ -66,7 +66,7 @@ multi-provider abstraction, UI/GUI, auto-install of an API key.
 ## Progress Tracker
 | Phase | Status | Commit | Notes |
 |-------|--------|--------|-------|
-| 1 — Implement SUB_1_CLI_CORE | ⬚ | | SUB_1 Phase 2/5 done at `9beb172`; meta-phase Done when all 5 SUB_1 phases land |
+| 1 — Implement SUB_1_CLI_CORE | ⬚ | | SUB_1 Phase 3/5 done at `78eebd7`; meta-phase Done when all 5 SUB_1 phases land |
 | 2 — Implement SUB_2_EDIT_FLOW | ⬚ | | |
 | 3 — Implement SUB_3_SKILL_INSTALL | ⊘ | | Final sub-plan terminates in a user checkpoint — meta-plan must NOT auto-complete |
 

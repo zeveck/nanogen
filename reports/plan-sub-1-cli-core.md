@@ -1,5 +1,48 @@
 # Plan Report — SUB_1_CLI_CORE
 
+## Phase — 3 Pure Request Builder + Response Parser
+
+**Plan:** plans/SUB_1_CLI_CORE.md
+**Status:** Done
+**Commit:** `78eebd7` on main
+**Landing mode:** direct-to-main
+
+### Work Items
+| # | Item | Status |
+|---|------|--------|
+| 1 | `readImageMaterials(args)` I/O wrapper | Done |
+| 2 | `buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex)` — pure | Done |
+| 3 | `parseResponse(json)` with 8-step decision tree | Done |
+| 4 | `magicBytes.cjs` shared helper (rule 19 + response magic check) | Done |
+| 5 | 9 request goldens | Done |
+| 6 | 10 response fixtures | Done |
+| 7 | `tiny-1x1.png` fixture (67-byte canonical PNG) | Done |
+| 8 | `test_request_builder.cjs` ≥10 tests | Done (14) |
+| 9 | `test_response_parser.cjs` ≥12 tests, all 8 refusal paths | Done (21, all 8 paths asserted) |
+| 10 | `--dry-run` uses real builder (not Phase 1 stub) | Done |
+| 11 | OMIT `thinkingConfig` when unset; OMIT `safetySettings` when unset | Done |
+
+### Verification
+- `test_request_builder.cjs` → **14/14 passed**
+- `test_response_parser.cjs` → **21/21 passed** (20 cases + refusal-coverage assertion)
+- Regression: `test_parse_args.cjs` **30/30**, `test_styles.cjs` **21/21**
+- Aggregate so far: **86 tests passing**
+- All 8 refusal paths asserted: `prompt-blocked:SAFETY`, `finish:SAFETY`, `finish:PROHIBITED_CONTENT`, `finish:IMAGE_SAFETY`, `finish:RECITATION`, `soft-refusal:no-image`, `no-candidates`, `bad-image-bytes`
+
+### Deviations
+- Shipped 10 response fixtures (plan's AC says ≥9; text said "7+"). Went with the stricter AC.
+- Added a final refusal-path-coverage test that fails if any path is un-asserted — defense in depth.
+- Extra test (case 17) combines `promptFeedback.blockReason` with a candidate containing `thoughtSignature`, proving step 2 does NOT early-return.
+- Additional exports (`composePromptText`, `canonicalSafetySettings`, `mimeTypeForExt`) for Phase 4/5 use. No behavior change.
+
+### Gaps
+None.
+
+### Next
+- **SUB_1 Phase 4** — HTTP client: `resolveApiKey` (with manual `.env` parsing to sidestep `loadEnvFile` pitfalls), `fetchWithRetry`, `mapHttpError`, `test_http_retry.cjs` (≥10 tests via `node:http` mock), `test_env.cjs` (≥8 tests).
+
+---
+
 ## Phase — 2 Style Catalog (styles.json + loader + --style)
 
 **Plan:** plans/SUB_1_CLI_CORE.md

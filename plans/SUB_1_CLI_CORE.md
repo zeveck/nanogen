@@ -58,7 +58,7 @@ SynthID detector, multi-provider abstraction, UI/GUI.
 |-------|--------|--------|-------|
 | 1 — Scaffold + arg parser + help + dry-run | ✅ Done | `ae67fde` | 30/30 tests pass |
 | 2 — Style catalog (styles.json + loader + `--style`) | ✅ Done | `9beb172` | 21 new tests, 72 presets × 10 categories, Phase 1 still green (30) |
-| 3 — Pure request builder + response parser | ⬚ | | |
+| 3 — Pure request builder + response parser | ✅ Done | `78eebd7` | 14 builder + 21 parser tests; 9 req + 10 resp goldens; all 8 refusal paths |
 | 4 — HTTP client: retry + error mapping + env var | ⬚ | | |
 | 5 — History JSONL + end-to-end integration + full test suite | ⬚ | | |
 
