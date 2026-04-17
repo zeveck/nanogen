@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// nanogen — Phase 1 scaffold: arg parser, validation, --help, --dry-run.
+// nanogen — Phase 1+2: arg parser, validation, --help, --dry-run, style catalog.
 // See plans/SUB_1_CLI_CORE.md for the authoritative spec.
 // This is intentionally zero-dependency; Node 20.12+ built-ins only.
 
@@ -80,6 +80,158 @@ const REPEATABLE_FLAGS = new Set([
 const BOOLEAN_FLAGS = new Set([
   "--dry-run", "--no-history", "--help", "-h",
 ]);
+
+// ---------------------------------------------------------------------------
+// Style Catalog (Phase 2)
+// ---------------------------------------------------------------------------
+
+// Fixed 10 categories — locked by plan. Do not add/rename without updating
+// plans/SUB_1_CLI_CORE.md.
+const FIXED_STYLE_CATEGORIES = [
+  "pixel-art",
+  "flat-vector",
+  "painterly",
+  "drawing-ink",
+  "photographic",
+  "animation-cartoon",
+  "fine-art-historical",
+  "game-style",
+  "design-technical",
+  "speculative-niche",
+];
+
+// Forbidden tokens enforced against every promptFragment (case-insensitive).
+// Slug and name fields are exempt. Adding a new preset that names a living
+// or trademarked-estate artist in its promptFragment will trip this check.
+const FORBIDDEN_STYLE_TOKENS = [
+  "studio ghibli",
+  "ghibli",
+  "pixar",
+  "dreamworks",
+  "disney",
+  "mike mignola",
+  "mignola",
+  "bruce timm",
+  "moebius",
+  "akira kurosawa",
+  "rembrandt",
+  "picasso",
+  "van gogh",
+];
+
+const STYLE_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+const MAX_FRAGMENT_LEN = 800;
+const MIN_STYLES_COUNT = 72;
+
+function loadStyles(stylesPath) {
+  const p = stylesPath || process.env.NANOGEN_STYLES_PATH ||
+    path.join(__dirname, "styles.json");
+  const raw = fs.readFileSync(p, "utf8");
+  const list = JSON.parse(raw);
+  if (!Array.isArray(list)) {
+    throw new Error("styles.json must be a JSON array");
+  }
+  const byKey = new Map();
+  for (const entry of list) {
+    if (entry && typeof entry.slug === "string") {
+      byKey.set(entry.slug, entry);
+    }
+  }
+  return { byKey, list };
+}
+
+function validateStyleCatalog(styles) {
+  const { list } = styles;
+  if (!Array.isArray(list)) {
+    return { ok: false, error: "styles catalog is not an array" };
+  }
+  const seenSlugs = new Set();
+  const catCounts = new Map();
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (!e || typeof e !== "object") {
+      return { ok: false, error: `entry ${i}: not an object` };
+    }
+    // (a) required fields
+    for (const field of ["slug", "name", "category", "promptFragment"]) {
+      if (typeof e[field] !== "string" || e[field].length === 0) {
+        return {
+          ok: false,
+          error: `entry ${i}: missing or empty required field "${field}"`,
+        };
+      }
+    }
+    // (b) slug shape
+    if (!STYLE_SLUG_RE.test(e.slug)) {
+      return {
+        ok: false,
+        error: `entry ${i}: slug "${e.slug}" does not match /^[a-z0-9][a-z0-9-]*$/`,
+      };
+    }
+    // (c) slug uniqueness
+    if (seenSlugs.has(e.slug)) {
+      return {
+        ok: false,
+        error: `duplicate slug: "${e.slug}"`,
+      };
+    }
+    seenSlugs.add(e.slug);
+    // (d) category in fixed 10
+    if (!FIXED_STYLE_CATEGORIES.includes(e.category)) {
+      return {
+        ok: false,
+        error: `entry ${i} (${e.slug}): unknown category "${e.category}"`,
+      };
+    }
+    catCounts.set(e.category, (catCounts.get(e.category) || 0) + 1);
+    // (g) promptFragment length
+    if (e.promptFragment.length > MAX_FRAGMENT_LEN) {
+      return {
+        ok: false,
+        error: `entry ${i} (${e.slug}): promptFragment length ${e.promptFragment.length} exceeds ${MAX_FRAGMENT_LEN}`,
+      };
+    }
+    // (h) forbidden tokens (case-insensitive) on promptFragment ONLY
+    const lc = e.promptFragment.toLowerCase();
+    for (const tok of FORBIDDEN_STYLE_TOKENS) {
+      if (lc.includes(tok)) {
+        return {
+          ok: false,
+          error: `entry ${e.slug}: promptFragment contains forbidden token "${tok}"`,
+        };
+      }
+    }
+  }
+  // (e) length >= 72
+  if (list.length < MIN_STYLES_COUNT) {
+    return {
+      ok: false,
+      error: `styles catalog has ${list.length} entries; need >= ${MIN_STYLES_COUNT}`,
+    };
+  }
+  // (f) distinct categories == 10
+  if (catCounts.size !== FIXED_STYLE_CATEGORIES.length) {
+    return {
+      ok: false,
+      error: `styles catalog has ${catCounts.size} distinct categories; need exactly ${FIXED_STYLE_CATEGORIES.length}`,
+    };
+  }
+  return { ok: true };
+}
+
+function applyStyles(promptText, styleSlugs, stylesIndex) {
+  if (!styleSlugs || styleSlugs.length === 0) return promptText;
+  const fragments = [];
+  for (const slug of styleSlugs) {
+    const entry = stylesIndex.byKey.get(slug);
+    if (!entry) {
+      // Defense-in-depth; validateArgs should have caught this already.
+      throw new Error(`unknown style slug: "${slug}"`);
+    }
+    fragments.push(entry.promptFragment);
+  }
+  return promptText + " Style: " + fragments.join(" ") + ".";
+}
 
 // ---------------------------------------------------------------------------
 // Runtime environment check (must be called FIRST in main)
@@ -186,7 +338,7 @@ function parseArgs(argv) {
 // Validation (21 rules, in stable order, short-circuit on first failure)
 // ---------------------------------------------------------------------------
 
-function validateArgs(args) {
+function validateArgs(args, stylesIndex) {
   // Rule 21 catches unknown flags; we evaluate LAST per matrix ordering.
   // But unknown-flag is rule #21 in the matrix (last); validation matrix
   // order is 1..21. We evaluate in order.
@@ -216,6 +368,15 @@ function validateArgs(args) {
   if (!VALID_MODELS.includes(model)) {
     return fail("E_UNKNOWN_MODEL",
       `--model "${model}" not in {${VALID_MODELS.join(",")}}`);
+  }
+  // 5b. --style slug not in catalog (Phase 2)
+  if (stylesIndex && args.styles && args.styles.length > 0) {
+    for (const slug of args.styles) {
+      if (!stylesIndex.byKey.has(slug)) {
+        return fail("E_UNKNOWN_STYLE",
+          `--style "${slug}" is not a known style slug; see styles.json`);
+      }
+    }
   }
   // 6. --aspect not in 14-valid set
   const aspect = args.aspect || DEFAULT_ASPECT;
@@ -436,7 +597,7 @@ function readImageMaterials(args) {
   return { imageMaterials };
 }
 
-function buildGenerateRequestFromMaterials(args, imageMaterials) {
+function buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex) {
   const base = process.env.NANOGEN_API_BASE ||
                "https://generativelanguage.googleapis.com";
   const model = args.model || DEFAULT_MODEL;
@@ -445,9 +606,14 @@ function buildGenerateRequestFromMaterials(args, imageMaterials) {
     "x-goog-api-key": "<resolved-at-send-time>",
     "Content-Type": "application/json",
   };
-  // Phase 1 stub body: just the prompt text as a single part.
+  // Phase 2 prompt composition: prepend styles if present. Phase 3 will
+  // extend this to negative prompts and full body shape.
+  let promptText = args.prompt;
+  if (stylesIndex && args.styles && args.styles.length > 0) {
+    promptText = applyStyles(promptText, args.styles, stylesIndex);
+  }
   const body = {
-    contents: [{ parts: [{ text: args.prompt }] }],
+    contents: [{ parts: [{ text: promptText }] }],
   };
   return { url, headers, body };
 }
@@ -483,6 +649,22 @@ function emitDryRun(url, headers, body) {
 function main() {
   checkRuntime();
 
+  // Phase 2: load + validate the style catalog BEFORE arg parsing so a
+  // broken catalog fails deterministically regardless of user flags.
+  let stylesIndex;
+  try {
+    stylesIndex = loadStyles();
+    const cv = validateStyleCatalog(stylesIndex);
+    if (!cv.ok) {
+      emitError("E_BAD_STYLES_CATALOG", cv.error);
+      process.exit(1);
+    }
+  } catch (e) {
+    emitError("E_BAD_STYLES_CATALOG",
+      "failed to load styles catalog: " + String(e && e.message || e));
+    process.exit(1);
+  }
+
   const argv = process.argv.slice(2);
   const args = parseArgs(argv);
 
@@ -491,7 +673,7 @@ function main() {
     process.exit(0);
   }
 
-  const v = validateArgs(args);
+  const v = validateArgs(args, stylesIndex);
   if (!v.ok) {
     emitError(v.code, v.error);
     process.exit(1);
@@ -506,7 +688,7 @@ function main() {
       process.exit(1);
     }
     const { url, headers, body } =
-      buildGenerateRequestFromMaterials(args, imageMaterials);
+      buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex);
     emitDryRun(url, headers, body);
     process.exit(0);
   }
@@ -530,6 +712,12 @@ module.exports = {
   validateArgs,
   readImageMaterials,
   buildGenerateRequestFromMaterials,
+  // Phase 2:
+  loadStyles,
+  validateStyleCatalog,
+  applyStyles,
+  FIXED_STYLE_CATEGORIES,
+  FORBIDDEN_STYLE_TOKENS,
 };
 
 if (require.main === module) {
