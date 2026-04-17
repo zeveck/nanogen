@@ -1,0 +1,16 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Cited content blocked."
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "RECITATION",
+      "index": 0
+    }
+  ]
+}

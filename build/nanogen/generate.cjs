@@ -7,6 +7,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const magicBytes = require("./magicBytes.cjs");
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -509,23 +510,11 @@ function fail(code, error) {
   return { ok: false, code, error };
 }
 
+// Thin wrapper over magicBytes.matchesExt; kept here so rule-19 validation
+// code remains readable at its call site. Input validation (rule 19) and
+// output validation (parseResponse) share the underlying helper.
 function magicMatches(head, ext) {
-  if (head.length < 4) return false;
-  if (ext === ".png") {
-    return head[0] === 0x89 && head[1] === 0x50 &&
-           head[2] === 0x4E && head[3] === 0x47;
-  }
-  if (ext === ".jpg" || ext === ".jpeg") {
-    return head[0] === 0xFF && head[1] === 0xD8 && head[2] === 0xFF;
-  }
-  if (ext === ".webp") {
-    if (head.length < 12) return false;
-    return head[0] === 0x52 && head[1] === 0x49 &&
-           head[2] === 0x46 && head[3] === 0x46 &&
-           head[8] === 0x57 && head[9] === 0x45 &&
-           head[10] === 0x42 && head[11] === 0x50;
-  }
-  return false;
+  return magicBytes.matchesExt(head, ext);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,42 +569,293 @@ function printHelp() {
 }
 
 // ---------------------------------------------------------------------------
-// --dry-run stubs (Phase 1 stubs; Phase 3 replaces with real implementations)
+// Phase 3 — Pure Request Builder + Response Parser
 // ---------------------------------------------------------------------------
+//
+// Two-layer split:
+//
+//   readImageMaterials(args)
+//     — I/O wrapper: reads each --image path from disk, returns buffers.
+//
+//   buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex)
+//     — PURE (no filesystem I/O). Takes pre-read buffers. Produces the
+//       {url, headers, body} tuple used by --dry-run and (Phase 4) the
+//       real HTTP call. Golden-testable via structural equality.
+//
+// The pure builder DOES read one env var — NANOGEN_API_BASE — which is the
+// single documented exception (see plan Phase 3). Golden tests unset it in
+// withCleanEnv so the production default pins into the goldens.
+//
+// Fields EXPLICITLY OMITTED from the body (documented here so nobody adds
+// them "just in case"): response_format, output_format, n, quality,
+// background, negativePrompt. All are OpenAI-only; Gemini either ignores
+// or 400s on them. See plan Phase 3 "Fields explicitly OMITTED" block.
 
+// Map from --image file extension (lowercase, with leading dot) to MIME type.
+function mimeTypeForExt(ext) {
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  // .jpg and .jpeg both map to image/jpeg
+  return "image/jpeg";
+}
+
+// I/O wrapper: reads each --image path into a Buffer and attaches a MIME
+// type derived from the file extension. Invocation order is preserved so
+// callers can feed the resulting array directly to the pure builder.
+//
+// Throws on any read failure; Phase 1's validateArgs has already confirmed
+// existence and size, so a failure here is unusual (permissions, race).
 function readImageMaterials(args) {
   const imageMaterials = [];
   for (const p of args.image) {
-    const buf = fs.readFileSync(p);
+    const buffer = fs.readFileSync(p);
     const ext = path.extname(p).toLowerCase();
-    const mimeType =
-      ext === ".png"  ? "image/png"  :
-      ext === ".webp" ? "image/webp" :
-                        "image/jpeg";
-    imageMaterials.push({ buffer: buf, mimeType, path: p });
+    imageMaterials.push({
+      buffer,
+      mimeType: mimeTypeForExt(ext),
+      path: p,
+    });
   }
   return { imageMaterials };
 }
 
+// Compose the final prompt text per the plan's deterministic order:
+//   1. base prompt
+//   2. styles (applyStyles appends " Style: <frags joined by space>.")
+//   3. negative (" Avoid: <neg joined by '; '>.")
+// Pure — no I/O.
+function composePromptText(args, stylesIndex) {
+  let promptText = args.prompt || "";
+  if (stylesIndex && args.styles && args.styles.length > 0) {
+    promptText = applyStyles(promptText, args.styles, stylesIndex);
+  }
+  if (args.negative && args.negative.length > 0) {
+    promptText = promptText + " Avoid: " + args.negative.join("; ") + ".";
+  }
+  return promptText;
+}
+
+// Canonicalize a parsed --safety entry into {category, threshold}. This
+// relies on validateArgs having already confirmed both sides are valid,
+// so missing-alias is not a runtime concern here. Duplicate categories
+// collapse with last-wins semantics (matches the stderr warning).
+function canonicalSafetySettings(safetyEntries) {
+  const byCat = new Map();
+  for (const entry of safetyEntries) {
+    const eq = entry.indexOf("=");
+    const rawCat = entry.slice(0, eq).trim().toLowerCase();
+    const rawThr = entry.slice(eq + 1).trim().toLowerCase();
+    const category = SAFETY_CATEGORY_ALIASES[rawCat];
+    const threshold = SAFETY_THRESHOLD_ALIASES[rawThr];
+    byCat.set(category, threshold);
+  }
+  const out = [];
+  for (const [category, threshold] of byCat.entries()) {
+    out.push({ category, threshold });
+  }
+  return out;
+}
+
+// PURE: builds {url, headers, body}. No filesystem I/O. Reads
+// NANOGEN_API_BASE from process.env (sole documented env access inside the
+// pure layer) — golden tests explicitly UNSET it via withCleanEnv so the
+// default prod host pins into the goldens.
 function buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex) {
   const base = process.env.NANOGEN_API_BASE ||
                "https://generativelanguage.googleapis.com";
   const model = args.model || DEFAULT_MODEL;
   const url = `${base}/v1beta/models/${model}:generateContent`;
+
+  // The builder emits a placeholder that the CLI entrypoint overwrites at
+  // send time (real key) or dry-run time (redacted). Golden tests pin the
+  // placeholder text, so NEVER change this string without regenerating
+  // every request golden.
   const headers = {
     "x-goog-api-key": "<resolved-at-send-time>",
     "Content-Type": "application/json",
   };
-  // Phase 2 prompt composition: prepend styles if present. Phase 3 will
-  // extend this to negative prompts and full body shape.
-  let promptText = args.prompt;
-  if (stylesIndex && args.styles && args.styles.length > 0) {
-    promptText = applyStyles(promptText, args.styles, stylesIndex);
+
+  // Prompt + zero-or-more inlineData parts, in invocation order.
+  const promptText = composePromptText(args, stylesIndex);
+  const parts = [{ text: promptText }];
+  if (imageMaterials && imageMaterials.length > 0) {
+    for (const m of imageMaterials) {
+      parts.push({
+        inlineData: {
+          mimeType: m.mimeType,
+          data: m.buffer.toString("base64"),
+        },
+      });
+    }
   }
-  const body = {
-    contents: [{ parts: [{ text: promptText }] }],
+
+  const generationConfig = {
+    responseModalities: ["IMAGE"],
+    imageConfig: {
+      aspectRatio: args.aspect || DEFAULT_ASPECT,
+      imageSize: args.size || DEFAULT_SIZE,
+    },
+    candidateCount: 1,
   };
+
+  // Optional fields — only present when the user set them. The plan pins
+  // goldens for both the present and absent cases.
+  if (args.thinking !== undefined) {
+    generationConfig.thinkingConfig = { thinkingLevel: args.thinking };
+  }
+  if (args.seed !== undefined) {
+    generationConfig.seed = Number(args.seed);
+  }
+  if (args.temperature !== undefined) {
+    generationConfig.temperature = Number(args.temperature);
+  }
+
+  const body = {
+    contents: [{ parts }],
+    generationConfig,
+  };
+
+  // safetySettings: OMIT entirely when no --safety flag. NEVER emit [].
+  if (args.safety && args.safety.length > 0) {
+    body.safetySettings = canonicalSafetySettings(args.safety);
+  }
+
   return { url, headers, body };
+}
+
+// ---------------------------------------------------------------------------
+// parseResponse — PURE. Implements the plan's exact 8-step decision tree.
+//
+// Input: the parsed JSON object from a Gemini generateContent response.
+// Output:
+//   {
+//     image:             Buffer|null,
+//     text:              string|null,
+//     finishReason:      string|null,
+//     thoughtSignature:  string|null,
+//     refusalReason:     string|null,
+//     promptBlockReason: string|null,
+//     responseMimeType:  string|null,
+//     unknownParts:      string[]
+//   }
+//
+// Refusal taxonomy (all 8 paths must be producible):
+//   prompt-blocked:<blockReason>  (e.g. prompt-blocked:SAFETY)
+//   finish:SAFETY
+//   finish:PROHIBITED_CONTENT
+//   finish:IMAGE_SAFETY
+//   finish:RECITATION
+//   soft-refusal:no-image         (finishReason=STOP, only text parts)
+//   no-candidates                 (candidates array missing / empty)
+//   bad-image-bytes               (base64 decoded but failed magic check)
+// ---------------------------------------------------------------------------
+
+const REFUSAL_FINISH_REASONS = new Set([
+  "SAFETY",
+  "PROHIBITED_CONTENT",
+  "IMAGE_SAFETY",
+  "RECITATION",
+]);
+const KNOWN_PART_KEYS = new Set(["text", "inlineData", "thoughtSignature"]);
+
+function parseResponse(json) {
+  // 1. init
+  const result = {
+    image: null,
+    text: null,
+    finishReason: null,
+    thoughtSignature: null,
+    refusalReason: null,
+    promptBlockReason: null,
+    responseMimeType: null,
+    unknownParts: [],
+  };
+  if (!json || typeof json !== "object") {
+    // Be defensive; treat non-object as missing candidates.
+    result.refusalReason = "no-candidates";
+    return result;
+  }
+
+  // 2. promptFeedback.blockReason — capture + mark refusal, but do NOT
+  //    early-return: the model may still have returned a thoughtSignature
+  //    or text in candidates[0] that we want to surface.
+  const pf = json.promptFeedback;
+  if (pf && typeof pf === "object" && pf.blockReason) {
+    result.promptBlockReason = pf.blockReason;
+    result.refusalReason = "prompt-blocked:" + pf.blockReason;
+  }
+
+  // 3. candidate extraction
+  const candidates = json.candidates;
+  const candidate = Array.isArray(candidates) ? candidates[0] : undefined;
+  if (!candidate) {
+    if (result.refusalReason === null) {
+      result.refusalReason = "no-candidates";
+    }
+    return result;
+  }
+
+  // 4. finishReason
+  result.finishReason = (candidate.finishReason !== undefined &&
+                         candidate.finishReason !== null)
+    ? candidate.finishReason : null;
+
+  // 5. refusal-by-finishReason. Does NOT early-return; we still collect
+  //    signatures and text.
+  if (result.finishReason && REFUSAL_FINISH_REASONS.has(result.finishReason)) {
+    if (result.refusalReason === null) {
+      result.refusalReason = "finish:" + result.finishReason;
+    }
+  }
+
+  // 6. walk parts
+  const content = candidate.content;
+  const parts = (content && Array.isArray(content.parts)) ? content.parts : [];
+  for (const part of parts) {
+    if (!part || typeof part !== "object") continue;
+
+    // thoughtSignature — capture if present on any part. Last-wins.
+    if ("thoughtSignature" in part && part.thoughtSignature !== undefined) {
+      result.thoughtSignature = part.thoughtSignature;
+    }
+
+    // inlineData — attempt base64 decode + magic-byte validation.
+    if (part.inlineData && typeof part.inlineData === "object" &&
+        typeof part.inlineData.data === "string") {
+      const buf = Buffer.from(part.inlineData.data, "base64");
+      if (buf.length > 0 && magicBytes.detectMagic(buf) !== null) {
+        result.image = buf;
+        result.responseMimeType = (part.inlineData.mimeType !== undefined &&
+                                   part.inlineData.mimeType !== null)
+          ? part.inlineData.mimeType : null;
+      } else if (result.refusalReason === null) {
+        result.refusalReason = "bad-image-bytes";
+      }
+    }
+
+    // text — accumulate with \n separator.
+    if (typeof part.text === "string") {
+      result.text = result.text === null
+        ? part.text
+        : (result.text + "\n" + part.text);
+    }
+
+    // unknownParts — any key outside the known trio is recorded for
+    // forward-compat observability.
+    for (const key of Object.keys(part)) {
+      if (!KNOWN_PART_KEYS.has(key)) {
+        result.unknownParts.push(key);
+      }
+    }
+  }
+
+  // 7. soft refusal: model finished cleanly but emitted no valid image.
+  if (result.image === null && result.refusalReason === null) {
+    result.refusalReason = "soft-refusal:no-image";
+  }
+
+  // 8. done.
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -706,7 +946,7 @@ function main() {
   process.exit(1);
 }
 
-// Export for potential in-process testing (not relied on by Phase 1 tests).
+// Export for in-process testing.
 module.exports = {
   parseArgs,
   validateArgs,
@@ -718,6 +958,11 @@ module.exports = {
   applyStyles,
   FIXED_STYLE_CATEGORIES,
   FORBIDDEN_STYLE_TOKENS,
+  // Phase 3:
+  parseResponse,
+  composePromptText,
+  canonicalSafetySettings,
+  mimeTypeForExt,
 };
 
 if (require.main === module) {
