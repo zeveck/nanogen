@@ -1,5 +1,47 @@
 # Plan Report — SUB_1_CLI_CORE
 
+## Phase — 4 HTTP Client: Retry, Error Mapping, Env Resolver
+
+**Plan:** plans/SUB_1_CLI_CORE.md
+**Status:** Done
+**Commit:** `a456bb3` on main
+**Landing mode:** direct-to-main
+
+### Work Items
+| # | Item | Status |
+|---|------|--------|
+| 1 | `resolveApiKey()` with hand-rolled `.env` parser (sidesteps `loadEnvFile` pitfalls) | Done |
+| 2 | `findDotenvFile()` walker: cwd upward → `__dirname` upward, dedup | Done |
+| 3 | `parseDotenvSync()` zero-dep parser; empty-values-as-absent | Done |
+| 4 | `fetchWithRetry()` with MAX_RETRIES/BASE_DELAY/TIMEOUT env overrides | Done |
+| 5 | Exponential backoff + 50% jitter; `Retry-After` honored (int 1–60 s) | Done |
+| 6 | Body-parse failures non-retryable | Done |
+| 7 | `mapHttpError()` 11-row table | Done |
+| 8 | CLI entrypoint wired: `runHttpFlow` replaces Phase-1 stub | Done |
+| 9 | `tests/test_http_retry.cjs` ≥10 tests via `node:http` mock | Done (13) |
+| 10 | `tests/test_env.cjs` ≥8 tests incl. empty-GEMINI_API_KEY reproducer | Done (12) |
+
+### Verification
+- `test_http_retry.cjs` → **13/13 passed** (3.35s)
+- `test_env.cjs` → **12/12 passed**
+- Regression: 30 + 21 + 14 + 21 = **86 prior tests still green**
+- Aggregate: **111 tests passing**
+- **Critical reproducer:** empty `GEMINI_API_KEY` + `.env` with real value → resolver correctly returns the `.env` value (this was the `loadEnvFile` bug the spec was built around)
+
+### Deviations
+- `test_http_retry.cjs` uses async `spawn` (wrapped in a Promise) instead of `spawnSync`. Rationale: `spawnSync` blocks the parent event loop, deadlocking the in-process HTTP mock (the server cannot accept the child's connection). Reproduced the deadlock before switching. `test_env.cjs` still uses `spawnSync` where appropriate.
+- Empty-values-as-absent logic lives inside `parseDotenvSync` (not a post-filter at call sites) — cleaner contract, matches test expectations.
+- Test 10 (chmod-000 `.env`) skips under root (root can read 0-mode files) via `process.getuid() === 0` detection.
+- Shipped 13 HTTP tests (2 extra pure-function unit tests for `mapHttpError` and `parseRetryAfter`) beyond the ≥10 floor.
+
+### Gaps
+None. Phase 5 surface (file writing, history JSONL, integration tests) is explicitly NOT touched per Phase 4 scope.
+
+### Next
+- **SUB_1 Phase 5** — History JSONL, end-to-end integration, aggregate `npm test` green with ≥89 tests. Final SUB_1 phase.
+
+---
+
 ## Phase — 3 Pure Request Builder + Response Parser
 
 **Plan:** plans/SUB_1_CLI_CORE.md
