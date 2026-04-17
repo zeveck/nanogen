@@ -66,7 +66,7 @@ multi-provider abstraction, UI/GUI, auto-install of an API key.
 ## Progress Tracker
 | Phase | Status | Commit | Notes |
 |-------|--------|--------|-------|
-| 1 — Implement SUB_1_CLI_CORE | ⬚ | | SUB_1 Phase 4/5 done at `a456bb3`; meta-phase Done when all 5 SUB_1 phases land |
+| 1 — Implement SUB_1_CLI_CORE | ✅ Done | `6902e0d` | All 5 SUB_1 phases landed; `npm test` exit 0, 126 tests |
 | 2 — Implement SUB_2_EDIT_FLOW | ⬚ | | |
 | 3 — Implement SUB_3_SKILL_INSTALL | ⊘ | | Final sub-plan terminates in a user checkpoint — meta-plan must NOT auto-complete |
 

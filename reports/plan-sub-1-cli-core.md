@@ -1,5 +1,47 @@
 # Plan Report — SUB_1_CLI_CORE
 
+**SUB_1 COMPLETE.** All 5 phases landed. `npm test` exit 0 with **126 passing tests** across 8 test files. Plan frontmatter flipped to `status: complete`.
+
+## Phase — 5 History JSONL + End-to-End Integration + Full Test Suite
+
+**Plan:** plans/SUB_1_CLI_CORE.md
+**Status:** Done — **SUB_1 COMPLETE**
+**Commit:** `6902e0d` on main
+**Landing mode:** direct-to-main
+
+### Work Items
+| # | Item | Status |
+|---|------|--------|
+| 1 | `appendHistory(entry, cwd)` best-effort + `historyWarning` on failure | Done |
+| 2 | `readHistory(cwd)` tolerant reader, skips malformed lines | Done |
+| 3 | Full history entry schema (sha-8 id, actual-MIME outputFormat, thoughtSignature, etc.) | Done |
+| 4 | Success flow: write output file + ext-vs-MIME warning + history + stdout JSON | Done |
+| 5 | Refusal flow: no output file + history with refusalReason + E_REFUSED stdout | Done |
+| 6 | Unknown `--history-parent` pinned stderr warning | Done |
+| 7 | `tests/test_history.cjs` ≥8 tests | Done (9) |
+| 8 | `tests/test_integration.cjs` ≥6 tests via mock | Done (6) |
+| 9 | README rewritten to sub-plan-1-complete form | Done |
+| 10 | `npm test` exit 0 across all 8 files | Done |
+
+### Verification
+- `cd build/nanogen && npm test` → exit 0
+- Per-file: 30, 21, 14, 21, 13, 12, 9, 6 = **126 tests**
+- Pinned stderr warnings validated: ext-vs-MIME mismatch, unknown parent
+- thoughtSignature round-tripped into history verified via mock (`sig-abc`)
+- `--no-history` + success → no `.nanogen-history.jsonl` created
+
+### Deviations
+- `outputExtension: null` when `--output` has no extension (defensive; rule 4 already rejects this case).
+- Shipped 9 history tests (≥8 floor) including a root/win32-tolerant chmod-000 degradation test.
+
+### Gaps
+None. **SUB_1 complete.**
+
+### Next
+- **SUB_2 Phase 1** — Multi-image assembly + `--region` flag. Kicks off sub-plan 2.
+
+---
+
 ## Phase — 4 HTTP Client: Retry, Error Mapping, Env Resolver
 
 **Plan:** plans/SUB_1_CLI_CORE.md

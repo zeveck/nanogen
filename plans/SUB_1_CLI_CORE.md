@@ -1,7 +1,7 @@
 ---
 title: /nanogen — Sub-Plan 1: CLI Core, Generate Flow, Style Catalog, Tests
 created: 2026-04-17
-status: active
+status: complete
 ---
 
 # Plan: /nanogen — Sub-Plan 1: CLI Core, Generate Flow, Style Catalog, Tests
@@ -60,7 +60,7 @@ SynthID detector, multi-provider abstraction, UI/GUI.
 | 2 — Style catalog (styles.json + loader + `--style`) | ✅ Done | `9beb172` | 21 new tests, 72 presets × 10 categories, Phase 1 still green (30) |
 | 3 — Pure request builder + response parser | ✅ Done | `78eebd7` | 14 builder + 21 parser tests; 9 req + 10 resp goldens; all 8 refusal paths |
 | 4 — HTTP client: retry + error mapping + env var | ✅ Done | `a456bb3` | 13 retry + 12 env tests; empty-GEMINI_API_KEY reproducer passes |
-| 5 — History JSONL + end-to-end integration + full test suite | ⬚ | | |
+| 5 — History JSONL + end-to-end integration + full test suite | ✅ Done | `6902e0d` | 9 history + 6 integration tests; `npm test` exit 0; aggregate **126/126** |
 
 ## Phase 1 — Scaffold + Arg Parser + --help + --dry-run
 
