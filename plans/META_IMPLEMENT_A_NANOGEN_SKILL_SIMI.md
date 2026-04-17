@@ -68,7 +68,7 @@ multi-provider abstraction, UI/GUI, auto-install of an API key.
 |-------|--------|--------|-------|
 | 1 — Implement SUB_1_CLI_CORE | ✅ Done | `6902e0d` | All 5 SUB_1 phases landed; `npm test` exit 0, 126 tests |
 | 2 — Implement SUB_2_EDIT_FLOW | ✅ Done | `b76a4cd` | All 3 SUB_2 phases landed; 164 tests green |
-| 3 — Implement SUB_3_SKILL_INSTALL | ⊘ | | Final sub-plan terminates in a user checkpoint — meta-plan must NOT auto-complete |
+| 3 — Implement SUB_3_SKILL_INSTALL | ⊘ Awaiting user verification | | Final sub-plan terminates in a user checkpoint — meta-plan must NOT auto-complete. SUB_3 Phase 1 + 2 done; Phase 3 wrote `reports/nanogen-api-key-setup.md` and emitted the checkpoint banner; awaiting user to verify the API key + run the 5-step checklist |
 
 ## Phase 1 — Implement: SUB_1 (Foundation CLI + Style Catalog + Tests)
 
