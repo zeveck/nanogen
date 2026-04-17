@@ -1,0 +1,12 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [],
+        "role": "model"
+      },
+      "finishReason": "IMAGE_SAFETY",
+      "index": 0
+    }
+  ]
+}

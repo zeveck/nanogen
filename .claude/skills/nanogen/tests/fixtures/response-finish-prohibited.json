@@ -1,0 +1,16 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Request blocked."
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "PROHIBITED_CONTENT",
+      "index": 0
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+  "headers": {
+    "x-goog-api-key": "<resolved-at-send-time>",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "make it blue Style: 16-bit pixel art with a 32-to-64 color palette, crisp square pixels, selective dithering, parallax-ready layered backgrounds, cel-style character sprites, saturated yet balanced colors evoking early-1990s cartridge graphics.. Region: the background. Avoid: no text."
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "<tiny-1x1-base64>"
+            }
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "<tiny-1x1-base64>"
+            }
+          }
+        ]
+      }
+    ],
+    "generationConfig": {
+      "responseModalities": [
+        "IMAGE"
+      ],
+      "imageConfig": {
+        "aspectRatio": "1:1",
+        "imageSize": "1K"
+      },
+      "candidateCount": 1
+    }
+  }
+}

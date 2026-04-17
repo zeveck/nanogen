@@ -1,0 +1,16 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "I can't generate that."
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "SAFETY",
+      "index": 0
+    }
+  ]
+}

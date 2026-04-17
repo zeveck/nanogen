@@ -1,0 +1,45 @@
+{
+  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+  "headers": {
+    "x-goog-api-key": "<resolved-at-send-time>",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "a fortress under siege Style: 16-bit pixel art with a 32-to-64 color palette, crisp square pixels, selective dithering, parallax-ready layered backgrounds, cel-style character sprites, saturated yet balanced colors evoking early-1990s cartridge graphics. Traditional oil painting with visible brushwork, layered glazes, warm chiaroscuro lighting, muted earth-tone palette of ochres, umbers and deep greens, canvas weave faintly visible, classical portraiture atmosphere.. Avoid: blurry; modern."
+          },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNoAAAABgABd8PAHgAAAABJRU5ErkJggg=="
+            }
+          }
+        ]
+      }
+    ],
+    "generationConfig": {
+      "responseModalities": [
+        "IMAGE"
+      ],
+      "imageConfig": {
+        "aspectRatio": "16:9",
+        "imageSize": "2K"
+      },
+      "candidateCount": 1,
+      "thinkingConfig": {
+        "thinkingLevel": "medium"
+      },
+      "seed": 1337,
+      "temperature": 0.5
+    },
+    "safetySettings": [
+      {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "OFF"
+      }
+    ]
+  }
+}

@@ -1,0 +1,434 @@
+[
+  {
+    "slug": "pixel-8bit",
+    "name": "8-bit Pixel Art",
+    "category": "pixel-art",
+    "promptFragment": "8-bit pixel art with a strictly limited palette of 16 or fewer colors, large visible square pixels, dithered shading, sprite-sheet aesthetic, flat backgrounds, no anti-aliasing, CRT-era home-console look."
+  },
+  {
+    "slug": "pixel-16bit",
+    "name": "16-bit Pixel Art",
+    "category": "pixel-art",
+    "promptFragment": "16-bit pixel art with a 32-to-64 color palette, crisp square pixels, selective dithering, parallax-ready layered backgrounds, cel-style character sprites, saturated yet balanced colors evoking early-1990s cartridge graphics."
+  },
+  {
+    "slug": "pixel-32bit",
+    "name": "32-bit Pixel Art",
+    "category": "pixel-art",
+    "promptFragment": "32-bit pixel art with a large 128-plus color palette, soft anti-aliased edges on select elements, detailed hand-pixeled shading, pre-rendered backdrop feel, painterly sprite highlights, rich late-1990s console aesthetic."
+  },
+  {
+    "slug": "pixel-modern-highdetail",
+    "name": "Modern High-Detail Pixel Art",
+    "category": "pixel-art",
+    "promptFragment": "Modern high-detail pixel art with hundreds of hand-placed colors, careful sub-pixel shading, animated-looking frames, volumetric lighting suggested through palette choice, intricate micro-detail on characters and props, crisp and readable at 1:1 scale."
+  },
+  {
+    "slug": "pixel-isometric-tile",
+    "name": "Isometric Tile Pixel Art",
+    "category": "pixel-art",
+    "promptFragment": "Isometric pixel art on a strict 2:1 tile grid, diorama-style scenes, consistent top-left light source, clean stair-stepped diagonals, pastel-to-medium saturated palette, tile-based architecture with readable depth cues."
+  },
+  {
+    "slug": "flat-minimalist",
+    "name": "Flat Minimalist",
+    "category": "flat-vector",
+    "promptFragment": "Flat minimalist vector illustration with solid color fills, no gradients, no texture, geometric primitives, strong silhouette, generous negative space, confident two-to-four color palette, editorial magazine feel."
+  },
+  {
+    "slug": "flat-material-design",
+    "name": "Flat Material Design",
+    "category": "flat-vector",
+    "promptFragment": "Flat material-design vector illustration with soft directional drop shadows, elevated card layers suggesting paper depth, bold primary-plus-accent palette, rounded geometry, crisp edges, subtle ink-spill ripple motifs."
+  },
+  {
+    "slug": "flat-glassmorphism",
+    "name": "Glassmorphism",
+    "category": "flat-vector",
+    "promptFragment": "Glassmorphism aesthetic with frosted translucent panels, subtle backdrop blur, thin white borders, vibrant pastel gradients behind the glass, floating layered UI cards, modern product-landing-page polish."
+  },
+  {
+    "slug": "flat-neumorphism",
+    "name": "Neumorphism",
+    "category": "flat-vector",
+    "promptFragment": "Neumorphism aesthetic with soft extruded shapes, dual-light inset and outset shadows on a muted monochrome background, matte plastic feel, low contrast, tactile button-like forms, soft shape language throughout."
+  },
+  {
+    "slug": "isometric-infographic",
+    "name": "Isometric Infographic",
+    "category": "flat-vector",
+    "promptFragment": "Isometric infographic illustration on a 30-degree projection, flat shading with two-tone ambient occlusion, clean vector outlines, saturated corporate palette, exploded miniature cityscape or device cutaway, explanatory diagram feel."
+  },
+  {
+    "slug": "oil-painting",
+    "name": "Oil Painting",
+    "category": "painterly",
+    "promptFragment": "Traditional oil painting with visible brushwork, layered glazes, warm chiaroscuro lighting, muted earth-tone palette of ochres, umbers and deep greens, canvas weave faintly visible, classical portraiture atmosphere."
+  },
+  {
+    "slug": "acrylic-impasto",
+    "name": "Acrylic Impasto",
+    "category": "painterly",
+    "promptFragment": "Acrylic impasto painting with thick raised paint strokes casting their own micro-shadows, palette-knife textures, saturated modern palette, energetic directional marks, semi-abstract contemporary-gallery mood."
+  },
+  {
+    "slug": "gouache",
+    "name": "Gouache",
+    "category": "painterly",
+    "promptFragment": "Gouache painting with opaque matte color fields, soft paper-grain texture, muted pastel palette with occasional saturated accents, flat layered shapes, picture-book storybook sensibility."
+  },
+  {
+    "slug": "watercolor",
+    "name": "Watercolor",
+    "category": "painterly",
+    "promptFragment": "Watercolor painting with wet-on-wet bleeds, visible paper grain, soft blooming edges, translucent washes over loose pencil underdrawing, limited cool palette with ink accents, delicate botanical-study feel."
+  },
+  {
+    "slug": "digital-painting-concept",
+    "name": "Digital Concept Painting",
+    "category": "painterly",
+    "promptFragment": "Digital concept painting with confident broad brush strokes, cinematic wide-lens composition, atmospheric perspective, moody volumetric light shafts, dramatic rim lighting, rich film-like color grade suitable for pre-production art."
+  },
+  {
+    "slug": "charcoal",
+    "name": "Charcoal Drawing",
+    "category": "drawing-ink",
+    "promptFragment": "Charcoal drawing with smudged black-to-grey tonal washes, visible fingertip blending, white-chalk highlights, toothy rag-paper texture, dramatic chiaroscuro, life-drawing studio atmosphere."
+  },
+  {
+    "slug": "pencil-sketch",
+    "name": "Pencil Sketch",
+    "category": "drawing-ink",
+    "promptFragment": "Graphite pencil sketch with layered hatching, soft 2B-to-6B tonal range, visible construction lines kept as part of the finish, light cold-press paper grain, study-book observational feel."
+  },
+  {
+    "slug": "pen-ink-crosshatch",
+    "name": "Pen and Ink Crosshatch",
+    "category": "drawing-ink",
+    "promptFragment": "Pen-and-ink illustration with dense crosshatching, confident contour lines, pure black on off-white paper, varying line weight for depth, no grey tones, nineteenth-century engraving feel."
+  },
+  {
+    "slug": "moebius-clear-line",
+    "name": "Clear Line (Moebius-esque)",
+    "category": "drawing-ink",
+    "promptFragment": "Clear-line comics illustration with uniform black outlines at a single weight, no hatching, flat pastel color fills, wide-open European-bande-dessinee compositions, sun-bleached desert palette, surreal science-fantasy mood."
+  },
+  {
+    "slug": "mignola-noir",
+    "name": "Ink Noir (Mignola-esque)",
+    "category": "drawing-ink",
+    "promptFragment": "High-contrast ink noir comics art with massive solid-black shadow shapes, minimal line detail inside lit areas, blocky geometric silhouettes, limited spot-color palette of sickly greens and dried-blood reds, occult pulp-horror atmosphere."
+  },
+  {
+    "slug": "ink-wash-sumi-e",
+    "name": "Ink Wash (Sumi-e)",
+    "category": "drawing-ink",
+    "promptFragment": "East Asian ink-wash painting with a loaded bamboo brush, swift tonal gradients from jet black to silver grey, abundant negative space, a single focal subject, rice-paper texture, meditative minimalist composition."
+  },
+  {
+    "slug": "ukiyo-e",
+    "name": "Ukiyo-e Woodblock",
+    "category": "drawing-ink",
+    "promptFragment": "Edo-period Japanese woodblock-print aesthetic with flat registered color blocks, confident black keyline, subtle bokashi gradient in the sky, muted indigo and vermilion palette, decorative stylized waves and clouds, kimono-pattern detail."
+  },
+  {
+    "slug": "hyperreal-portrait",
+    "name": "Hyperreal Portrait Photograph",
+    "category": "photographic",
+    "promptFragment": "Hyperreal studio portrait photograph, 85mm prime lens at f/1.4, soft key light with subtle rim, shallow depth of field, visible skin-pore detail and individual eyelashes, neutral color grade, magazine-cover polish."
+  },
+  {
+    "slug": "studio-product",
+    "name": "Studio Product Photograph",
+    "category": "photographic",
+    "promptFragment": "Commercial studio product photograph with softbox lighting, seamless white or gradient backdrop, subtle contact shadow, crisp reflective highlights, color-accurate neutral grade, centered hero composition."
+  },
+  {
+    "slug": "street-photography",
+    "name": "Street Photograph",
+    "category": "photographic",
+    "promptFragment": "Candid street photograph in 35mm black-and-white with grainy high-ISO film look, decisive-moment composition, deep Zone-System contrast, urban geometry, available-light chiaroscuro, documentary honesty."
+  },
+  {
+    "slug": "macro",
+    "name": "Macro Photograph",
+    "category": "photographic",
+    "promptFragment": "Macro photograph at 1:1 magnification, razor-thin depth of field, jewel-like subject detail, soft diffused ring light, creamy bokeh background, saturated natural colors, nature-journal scientific clarity."
+  },
+  {
+    "slug": "astrophotography",
+    "name": "Astrophotography",
+    "category": "photographic",
+    "promptFragment": "Long-exposure astrophotograph of a star-strewn sky, visible Milky Way core, deep ink-blue and magenta nebular tones, sharp foreground silhouette, subtle star trails, calibrated low-noise color grade."
+  },
+  {
+    "slug": "film-grain-35mm",
+    "name": "35mm Film Grain",
+    "category": "photographic",
+    "promptFragment": "35mm color-negative film photograph with organic grain, warm highlights with soft roll-off, slight halation around light sources, gentle magenta-leaning shadows, dated-but-romantic analog snapshot feel."
+  },
+  {
+    "slug": "tilt-shift",
+    "name": "Tilt-Shift Miniature",
+    "category": "photographic",
+    "promptFragment": "Tilt-shift photograph simulating a miniature-model look, extreme depth-of-field falloff at top and bottom, saturated toy-like color boost, high-angle elevated viewpoint, city-street or model-railway composition."
+  },
+  {
+    "slug": "polaroid",
+    "name": "Instant Polaroid",
+    "category": "photographic",
+    "promptFragment": "Instant-film snapshot with white border, square frame, soft vignetting, lifted blacks, warm chemical color shift, mild focus softness, nostalgic pre-digital family-album atmosphere."
+  },
+  {
+    "slug": "cyanotype",
+    "name": "Cyanotype",
+    "category": "photographic",
+    "promptFragment": "Cyanotype print with a signature Prussian-blue and white tonal range, soft tonal gradients from botanical contact-print exposure, fibrous hand-coated paper texture, ghostly silhouette subject, nineteenth-century scientific-illustration feel."
+  },
+  {
+    "slug": "infrared",
+    "name": "Infrared Photograph",
+    "category": "photographic",
+    "promptFragment": "Infrared photograph with surreal white foliage, near-black sky, glowing skin highlights, heightened cloud contrast, soft dreamlike haze, monochrome or false-color swapped-channel palette."
+  },
+  {
+    "slug": "studio-ghibli-esque",
+    "name": "Hand-Drawn Animated Film (Ghibli-esque)",
+    "category": "animation-cartoon",
+    "promptFragment": "Hand-drawn 2D animated-film aesthetic with soft watercolor backgrounds, gentle cel-shaded characters on two tones, pastoral skies with layered painted clouds, warm golden-hour light, whimsical countryside or steampunk-town atmosphere."
+  },
+  {
+    "slug": "pixar-cg-esque",
+    "name": "Family-Friendly 3D CG (Pixar-esque)",
+    "category": "animation-cartoon",
+    "promptFragment": "Family-friendly 3D computer-graphics look with slightly stylized proportions, squash-and-stretch-ready forms, soft subsurface-scattered skin, glossy specular highlights, warm cinematic three-point lighting, uplifting feature-film mood."
+  },
+  {
+    "slug": "dreamworks-cg-esque",
+    "name": "Adventurous 3D CG (DreamWorks-esque)",
+    "category": "animation-cartoon",
+    "promptFragment": "Adventurous 3D computer-graphics style with slightly angular stylized characters, expressive raised eyebrows, rich detailed textures on fabrics and fur, dynamic wide-lens cinematic camera, saturated action-adventure color grade."
+  },
+  {
+    "slug": "cel-shaded-3d",
+    "name": "Cel-Shaded 3D",
+    "category": "animation-cartoon",
+    "promptFragment": "Cel-shaded 3D render with hard-banded two-tone lighting, bold black outlines via inverse-hull, flat textured surfaces with limited gradients, anime-inspired shape language, game-cinematic composition."
+  },
+  {
+    "slug": "anime-key-visual",
+    "name": "Anime Key Visual",
+    "category": "animation-cartoon",
+    "promptFragment": "Anime-style promotional key-visual illustration with sharp character linework, soft airbrushed skin shading, detailed hair highlights, painted atmospheric background, slight bloom on light sources, emotional cinematic composition."
+  },
+  {
+    "slug": "saturday-morning-retro",
+    "name": "Retro Saturday-Morning Cartoon",
+    "category": "animation-cartoon",
+    "promptFragment": "Retro 1980s Saturday-morning cartoon look with thick black outlines, flat cel-painted colors, slightly registered-off color fills, limited animation held poses, saturated hero-team palette, cheerful action-adventure vibe."
+  },
+  {
+    "slug": "bruce-timm-dcau-esque",
+    "name": "Deco Superhero Animation",
+    "category": "animation-cartoon",
+    "promptFragment": "Streamlined deco-influenced superhero animation aesthetic, bold geometric character shapes, strong square jawlines, black-and-limited-color shading, noir-leaning saturated palette against dark skies, mid-1990s animated-series mood."
+  },
+  {
+    "slug": "art-nouveau",
+    "name": "Art Nouveau",
+    "category": "fine-art-historical",
+    "promptFragment": "Art Nouveau decorative illustration with sinuous organic whiplash lines, botanical floral borders, flat muted jewel-tone palette, gold leaf accents, elongated elegant figures, belle-epoque poster-print sensibility."
+  },
+  {
+    "slug": "art-deco",
+    "name": "Art Deco",
+    "category": "fine-art-historical",
+    "promptFragment": "Art Deco illustration with symmetrical geometric composition, stepped zigzag motifs, streamlined stylized figures, metallic gold and black palette against deep teal or cream, 1920s-and-1930s luxury-poster sensibility."
+  },
+  {
+    "slug": "bauhaus",
+    "name": "Bauhaus",
+    "category": "fine-art-historical",
+    "promptFragment": "Bauhaus composition of primary-color geometric primitives, perfect circles, triangles and rectangles, thick black constructivist lines, grid-based layout, sans-serif typographic mood, early-twentieth-century design-school clarity."
+  },
+  {
+    "slug": "impressionism",
+    "name": "Impressionism",
+    "category": "fine-art-historical",
+    "promptFragment": "Impressionist painting with short broken brushstrokes, unblended complementary colors vibrating against each other, plein-air outdoor light, softened edges, emphasis on the impression of shifting daylight over precise detail."
+  },
+  {
+    "slug": "cubism",
+    "name": "Cubism",
+    "category": "fine-art-historical",
+    "promptFragment": "Analytical cubist composition with a subject fragmented into overlapping faceted planes, multiple simultaneous viewpoints, muted ochre-and-grey palette, flattened picture-plane depth, early-twentieth-century avant-garde feel."
+  },
+  {
+    "slug": "surrealism",
+    "name": "Surrealism",
+    "category": "fine-art-historical",
+    "promptFragment": "Surrealist dreamscape painting with impossible juxtapositions, melting or floating objects, hyper-clear focus across a vast depth of field, muted earth palette under uncanny clear light, tiny distant figures, dream-logic composition."
+  },
+  {
+    "slug": "fauvism",
+    "name": "Fauvism",
+    "category": "fine-art-historical",
+    "promptFragment": "Fauvist painting with wildly non-naturalistic saturated color, flat broad brushed planes, bold arbitrary hues for skin and landscape, simplified drawing, joyful early-twentieth-century rebellious palette."
+  },
+  {
+    "slug": "expressionism",
+    "name": "Expressionism",
+    "category": "fine-art-historical",
+    "promptFragment": "Expressionist painting with distorted exaggerated forms, jarring clashing colors, swirling turbulent brush strokes, raw emotional charge, thick outlines, early-twentieth-century anxious psychological mood."
+  },
+  {
+    "slug": "baroque-chiaroscuro",
+    "name": "Baroque Chiaroscuro",
+    "category": "fine-art-historical",
+    "promptFragment": "Baroque tenebrist painting with a single dramatic warm light source, deep velvety shadow occupying most of the frame, theatrically posed figures, rich ochre-to-crimson palette, seventeenth-century old-master gravitas."
+  },
+  {
+    "slug": "fft-yoshida",
+    "name": "Isometric Tactical RPG (FFT/Yoshida)",
+    "category": "game-style",
+    "promptFragment": "Isometric tactical RPG aesthetic with chibi 1:2 head-to-body proportions, muted earth-tone palette of aged parchment beiges, warm ambers and olive greens, dark grey outlines, medieval manuscript decorative feel, diorama-quality tiled terrain."
+  },
+  {
+    "slug": "tactics-ogre-dark",
+    "name": "Dark Tactical RPG (Tactics Ogre)",
+    "category": "game-style",
+    "promptFragment": "Dark tactical RPG aesthetic with grounded adult-proportioned character sprites, grim overcast palette of slate blues, oxidized bronzes and blood reds, detailed armored figures, weathered battlefield tiles, somber political-war mood."
+  },
+  {
+    "slug": "shining-force-16bit",
+    "name": "16-bit Tactical RPG (Shining Force)",
+    "category": "game-style",
+    "promptFragment": "16-bit tactical RPG sprite aesthetic with cheerful saturated primary-plus-pastel palette, expressive oversized-head character proportions, clean pixel outlines, cartoony hand-painted battlefield tiles, early-1990s console-RPG warmth."
+  },
+  {
+    "slug": "fire-emblem-gba",
+    "name": "GBA Tactical RPG (Fire Emblem)",
+    "category": "game-style",
+    "promptFragment": "Handheld-era tactical RPG aesthetic with compact pixel sprites, vivid jewel-tone palette, expressive map animations, crisp tile-based terrain, anime-styled portrait cut-ins, early-2000s portable-console clarity."
+  },
+  {
+    "slug": "disgaea-chibi",
+    "name": "Chibi Strategy RPG (Disgaea)",
+    "category": "game-style",
+    "promptFragment": "Chibi strategy RPG aesthetic with exaggerated super-deformed proportions, oversized heads, hyper-saturated candy-colored palette, sparkle and flame particle effects, comedic expressive poses, Prinny-plush energy."
+  },
+  {
+    "slug": "hd2d-modern-tactics",
+    "name": "HD-2D Modern Tactics",
+    "category": "game-style",
+    "promptFragment": "HD-2D modern tactics aesthetic combining crisp pixel-art sprites with painterly 3D environments, tilt-shift depth-of-field blur, rich god rays, warm cinematic color grade, diorama-like tilted camera, nostalgic-yet-contemporary mood."
+  },
+  {
+    "slug": "metroidvania-painterly",
+    "name": "Painterly Metroidvania",
+    "category": "game-style",
+    "promptFragment": "Painterly 2D metroidvania aesthetic with hand-painted parallax backgrounds, silhouetted foreground characters, moody cool palette pierced by warm lantern accents, crumbling gothic ruins, melancholy indie-game atmosphere."
+  },
+  {
+    "slug": "low-poly-psx",
+    "name": "Low-Poly PSX Era",
+    "category": "game-style",
+    "promptFragment": "Low-polygon late-1990s console aesthetic with angular untextured-looking meshes, vertex-snapping jitter, warped affine-mapped textures, limited 256-color dithered palette, fog in the distance, raw original-PlayStation rendering charm."
+  },
+  {
+    "slug": "ps2-era-character",
+    "name": "PS2-Era Character Rendering",
+    "category": "game-style",
+    "promptFragment": "Early-2000s sixth-console-generation character rendering with modestly detailed meshes, soft baked-lighting textures, slightly plasticky specular highlights, limited shadow resolution, nostalgic pre-HD action-adventure presentation."
+  },
+  {
+    "slug": "modern-indie-platformer",
+    "name": "Modern Indie Platformer",
+    "category": "game-style",
+    "promptFragment": "Modern indie platformer aesthetic with chunky hand-drawn vector characters, gently animated squash-and-stretch, saturated cheerful palette, layered parallax foliage, subtle post-process bloom, contemporary digital-storefront polish."
+  },
+  {
+    "slug": "blueprint",
+    "name": "Blueprint",
+    "category": "design-technical",
+    "promptFragment": "Technical blueprint drawing with white line work on deep cyan paper, orthographic projections, dimension lines with arrowheads, fine dashed hidden lines, handwritten annotation lettering, early-twentieth-century engineering-office feel."
+  },
+  {
+    "slug": "architectural-hyperreal",
+    "name": "Hyperreal Architectural Render",
+    "category": "design-technical",
+    "promptFragment": "Hyperreal architectural rendering with physically-based materials, accurate sun-study lighting, realistic glass reflections, lifestyle people and vegetation at human scale, shallow-to-medium depth of field, high-end property-marketing polish."
+  },
+  {
+    "slug": "architectural-sketch",
+    "name": "Architectural Concept Sketch",
+    "category": "design-technical",
+    "promptFragment": "Architectural concept sketch drawn in confident pen outline with loose marker wash, one-or-two-point perspective, soft grey shadow layers, a wash of a single accent color, visible construction guidelines, design-studio charette feel."
+  },
+  {
+    "slug": "schematic-diagram",
+    "name": "Schematic Diagram",
+    "category": "design-technical",
+    "promptFragment": "Clean schematic diagram on a neutral-grey grid, standardized electrical-or-mechanical symbols, labeled components, crisp thin black linework, color-coded signal paths, didactic textbook-figure clarity."
+  },
+  {
+    "slug": "exploded-view-diagram",
+    "name": "Exploded-View Diagram",
+    "category": "design-technical",
+    "promptFragment": "Exploded-view technical illustration with axonometric projection, components spaced along dashed assembly lines, clean airbrush-style cel shading, neutral muted palette with one accent color, numbered callouts, workshop-manual clarity."
+  },
+  {
+    "slug": "vaporwave",
+    "name": "Vaporwave",
+    "category": "speculative-niche",
+    "promptFragment": "Vaporwave aesthetic with a pink-and-cyan neon gradient sky, Roman plaster busts on checkerboard floors, glitching CRT-scanline overlays, Japanese half-width katakana typography, dreamy 1990s-mall nostalgia."
+  },
+  {
+    "slug": "synthwave",
+    "name": "Synthwave",
+    "category": "speculative-niche",
+    "promptFragment": "Synthwave aesthetic with a neon magenta-to-indigo gradient sunset, infinite chrome grid horizon, silhouetted palm trees, chrome wireframe mountains, VHS chromatic aberration, 1980s retro-future arcade mood."
+  },
+  {
+    "slug": "solarpunk",
+    "name": "Solarpunk",
+    "category": "speculative-niche",
+    "promptFragment": "Solarpunk illustration with verdant plant-covered architecture, integrated solar panels and wind turbines, warm optimistic midday light, lush biodiverse palette of greens and sunflower yellows, community rooftop gardens, hopeful ecological-futurism feel."
+  },
+  {
+    "slug": "cottagecore",
+    "name": "Cottagecore",
+    "category": "speculative-niche",
+    "promptFragment": "Cottagecore illustration with a thatched stone cottage amid wildflower meadows, hand-knit textiles, baskets of sourdough and herbs, soft natural daylight, muted sage-and-butter palette, pastoral hand-drawn storybook warmth."
+  },
+  {
+    "slug": "dark-academia",
+    "name": "Dark Academia",
+    "category": "speculative-niche",
+    "promptFragment": "Dark academia illustration with gothic stone university corridors, candlelit leather-bound tomes, wool tartan and tweed textiles, muted ochre-and-oxblood palette, overcast northern-European autumn light, introspective literary mood."
+  },
+  {
+    "slug": "cyberpunk-neon",
+    "name": "Cyberpunk Neon",
+    "category": "speculative-niche",
+    "promptFragment": "Cyberpunk neon-drenched megacity at night, rain-slicked streets reflecting saturated magenta and cyan signage, dense holographic kanji and katakana advertising, volumetric fog, chrome-and-leather cybernetic characters, gritty high-tech-low-life mood."
+  },
+  {
+    "slug": "atompunk",
+    "name": "Atompunk",
+    "category": "speculative-niche",
+    "promptFragment": "Atompunk mid-century-futurist illustration with chrome-finned rockets, atomic orbital logos, pastel turquoise-and-tangerine palette, sweeping googie architecture, starburst accents, 1950s-and-1960s World's Fair optimism."
+  },
+  {
+    "slug": "dieselpunk",
+    "name": "Dieselpunk",
+    "category": "speculative-niche",
+    "promptFragment": "Dieselpunk interwar-futurist illustration with riveted steel hulls, bulbous prop-driven aircraft, smoke-belching exhaust stacks, sepia-and-gunmetal palette, art-deco industrial architecture, 1930s-and-1940s alternate-history mood."
+  },
+  {
+    "slug": "brutalist-scifi",
+    "name": "Brutalist Science Fiction",
+    "category": "speculative-niche",
+    "promptFragment": "Brutalist science-fiction architecture with massive raw concrete megastructures, harsh angular geometry, tiny human figures for scale, overcast diffuse light, desaturated grey-and-rust palette, oppressive retro-future-totalitarian mood."
+  }
+]

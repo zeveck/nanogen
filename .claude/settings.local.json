@@ -25,7 +25,8 @@
       "Bash(xargs:*)",
       "Bash(npx http-server:*)",
       "Bash(mkdir -p /workspaces/nanogen/.claude/skills)",
-      "Bash(cp -r /tmp/zskills-dev/skills/*/ /workspaces/nanogen/.claude/skills/)"
+      "Bash(cp -r /tmp/zskills-dev/skills/*/ /workspaces/nanogen/.claude/skills/)",
+      "Bash(node /workspaces/nanogen/.claude/skills/nanogen/generate.cjs:*)"
     ],
     "deny": []
   }

@@ -8,10 +8,13 @@
     "branch_prefix": "feat/"
   },
   "testing": {
-    "unit_cmd": "",
+    "unit_cmd": "cd .claude/skills/nanogen && npm test",
     "full_cmd": "",
     "output_file": ".test-results.txt",
-    "file_patterns": []
+    "file_patterns": [
+      ".claude/skills/nanogen/**/*.cjs",
+      ".claude/skills/nanogen/**/*.json"
+    ]
   },
   "dev_server": {
     "cmd": "",

@@ -1,0 +1,31 @@
+{
+  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+  "headers": {
+    "x-goog-api-key": "<resolved-at-send-time>",
+    "Content-Type": "application/json"
+  },
+  "body": {
+    "contents": [
+      {
+        "parts": [
+          {
+            "text": "tiny sprite"
+          }
+        ]
+      }
+    ],
+    "generationConfig": {
+      "responseModalities": [
+        "IMAGE"
+      ],
+      "imageConfig": {
+        "aspectRatio": "1:1",
+        "imageSize": "512"
+      },
+      "candidateCount": 1,
+      "thinkingConfig": {
+        "thinkingLevel": "minimal"
+      }
+    }
+  }
+}
