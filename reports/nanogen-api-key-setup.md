@@ -17,13 +17,32 @@ status: awaiting-user-verification
 1. **Get a key** at https://aistudio.google.com/app/apikey →
    click "Create API key" → "Create API key in new project".
    (AI Studio auto-creates a GCP project for you; no Cloud Console
-   setup needed. See section 2 for detail.)
-2. **Put it in `.env`** (matches imagegen's pattern):
+   setup needed. See section 2.)
+
+   The key is a ~40-character string beginning with `AIza`.
+
+2. **Put it in `.env`** at the repo root. The variable name
+   `GEMINI_API_KEY` is required (that's the literal name the CLI
+   looks up). Replace `AIza...` with your actual key:
+
    ```bash
-   echo 'GEMINI_API_KEY=AIza...YOUR-KEY...' > /workspaces/nanogen/.env
+   echo 'GEMINI_API_KEY=AIza...paste-your-actual-key-here...' \
+     > /workspaces/nanogen/.env
    grep -q '^\.env$' /workspaces/nanogen/.gitignore \
      || echo '.env' >> /workspaces/nanogen/.gitignore
    ```
+
+   After the `echo`, the file `/workspaces/nanogen/.env` contains
+   one line:
+
+   ```
+   GEMINI_API_KEY=AIza...paste-your-actual-key-here...
+   ```
+
+   This matches imagegen's pattern; the CLI walks up from cwd to
+   find `.env`. (Section 3 has alternatives if you prefer shell
+   `export`.)
+
 3. **Tell me you're ready.** I'll verify the implementation end-to-
    end (~$0.10 spend). Once clean, you test the skill via
    `/nanogen <prompt>` in Claude Code.
@@ -130,16 +149,40 @@ pick one.
 
 ### ⭐ Recommended: project-scoped `.env` (matches imagegen)
 
-Create a file named `.env` at `/workspaces/nanogen/.env`:
+**Create a plain-text file at `/workspaces/nanogen/.env`** with
+this one line in it:
 
-```bash
-echo 'GEMINI_API_KEY=AIza...YOUR-KEY-HERE...' > /workspaces/nanogen/.env
-grep -q '^\.env$' /workspaces/nanogen/.gitignore || echo '.env' >> /workspaces/nanogen/.gitignore
+```
+GEMINI_API_KEY=AIza...paste-your-actual-key-here...
 ```
 
-The CLI walks up the directory tree from cwd looking for `.env`, so
-this works whether you invoke from the repo root, a subdirectory,
-or a worktree. Same pattern as `github.com/zeveck/imagegen`.
+Format rules for `.env`:
+- One `NAME=VALUE` per line. **The name `GEMINI_API_KEY` is
+  required**, spelled exactly — the CLI reads that specific
+  variable. Don't rename it or prefix with `export`.
+- No quotes around the value unless it contains spaces (Gemini
+  keys never do; plain `AIza...` is fine).
+- Lines starting with `#` are comments.
+- The file lives at the repo root: `/workspaces/nanogen/.env`.
+
+Either use your editor, or this one-liner:
+
+```bash
+echo 'GEMINI_API_KEY=AIza...paste-your-actual-key-here...' \
+  > /workspaces/nanogen/.env
+```
+
+Make sure `.env` is gitignored:
+
+```bash
+grep -q '^\.env$' /workspaces/nanogen/.gitignore \
+  || echo '.env' >> /workspaces/nanogen/.gitignore
+```
+
+The CLI walks up the directory tree from cwd looking for `.env`,
+so this works whether you invoke from the repo root, a
+subdirectory, or a worktree. Same pattern as
+`github.com/zeveck/imagegen`.
 
 **Why this is the default:**
 - Survives shell restarts without editing `~/.bashrc`
