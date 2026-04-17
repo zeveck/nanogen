@@ -398,4 +398,353 @@ test("ext-vs-MIME mismatch: stderr warning; file written; history reflects actua
   }
 });
 
+// ---------------------------------------------------------------------------
+// Sub-plan 2 Phase 3 — integration tests that exercise the multi-turn
+// continuation flow end-to-end via the in-process mock server. The two-call
+// round-trip (test 7) is THE key Gemini-3 correctness proof: invocation 1
+// persists `thoughtSignature` to history; invocation 2 reads it back and
+// puts it in the continuation request body; the mock server verifies the
+// exact byte sequence is present at contents[1].parts[1].thoughtSignature.
+// ---------------------------------------------------------------------------
+
+// Helper: make a handler that both asserts on the parsed incoming body and
+// emits a success response. Assertion failures surface as 500 with body
+// {"error":{"message":"MOCK ASSERT: <msg>"}}. With NANOGEN_MAX_RETRIES=0 the
+// CLI exits immediately as E_UPSTREAM_5XX and we read the MOCK ASSERT marker
+// from stderr.
+function assertingHandler(assertFn, responseBody) {
+  return (req, res, state) => {
+    let parsed;
+    try {
+      parsed = JSON.parse(state.requests[state.requests.length - 1].body);
+    } catch (e) {
+      return respondJson(res, 500,
+        { error: { message: "MOCK ASSERT: body was not JSON: " + e.message } });
+    }
+    try {
+      assertFn(parsed);
+    } catch (e) {
+      return respondJson(res, 500,
+        { error: { message: "MOCK ASSERT: " + (e && e.message || String(e)) } });
+    }
+    return respondJson(res, 200, responseBody);
+  };
+}
+
+// 7. THE KEY TEST — two-call round-trip proving thoughtSignature is sent
+// back verbatim on the continuation request body. This is the Gemini-3
+// correctness proof the whole sub-plan exists to deliver.
+test("round-trip: invocation 2 sends prior thoughtSignature in continuation body", async () => {
+  // First call: plain generate returning an image + sig-xyz.
+  // Second call: mock asserts body.contents[1].parts[1].thoughtSignature
+  // equals "sig-xyz"; on success returns a new image + sig-def.
+  const mock = await makeMock([
+    (req, res) => respondJson(res, 200,
+      successBody({ thoughtSignature: "sig-xyz" })),
+    assertingHandler(
+      (body) => {
+        if (!Array.isArray(body.contents) || body.contents.length !== 3) {
+          throw new Error("contents must be a 3-turn array; got " +
+            JSON.stringify(body.contents && body.contents.length));
+        }
+        if (body.contents[0].role !== "user") {
+          throw new Error("contents[0].role must be 'user'");
+        }
+        if (body.contents[1].role !== "model") {
+          throw new Error("contents[1].role must be 'model'");
+        }
+        if (body.contents[2].role !== "user") {
+          throw new Error("contents[2].role must be 'user'");
+        }
+        const modelParts = body.contents[1].parts;
+        if (!Array.isArray(modelParts) || modelParts.length < 2) {
+          throw new Error("model turn must have >= 2 parts (inlineData + sig)");
+        }
+        const sigPart = modelParts[1];
+        if (!sigPart || sigPart.thoughtSignature !== "sig-xyz") {
+          throw new Error(
+            "contents[1].parts[1].thoughtSignature must equal 'sig-xyz'; got " +
+            JSON.stringify(sigPart));
+        }
+      },
+      successBody({ thoughtSignature: "sig-def" })
+    ),
+  ]);
+  const tmp = mkTmp();
+  try {
+    const out1 = path.join(tmp, "t1.png");
+    const out2 = path.join(tmp, "t2.png");
+
+    // Invocation 1: plain generate.
+    const r1 = await runCLI(
+      ["--prompt", "cat", "--output", out1],
+      { NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}` },
+      tmp
+    );
+    assert.equal(r1.status, 0,
+      `invocation 1 must exit 0; stderr=${r1.stderr}; stdout=${r1.stdout}`);
+    assert.ok(fs.existsSync(out1), "invocation 1 output file must exist");
+    assert.deepEqual(fs.readFileSync(out1), TINY_PNG_BYTES,
+      "invocation 1 bytes must match the mock payload");
+
+    // Inspect history: capture the id AND verify sig persisted.
+    const rowsAfter1 = readHistoryFile(tmp);
+    assert.equal(rowsAfter1.length, 1, "exactly one history row after call 1");
+    assert.equal(rowsAfter1[0].thoughtSignature, "sig-xyz",
+      "history[0].thoughtSignature must persist the mock-returned sig");
+    const firstId = rowsAfter1[0].id;
+    assert.ok(typeof firstId === "string" && firstId.length > 0);
+
+    // Invocation 2: --history-continue with the captured id.
+    // NANOGEN_MAX_RETRIES=0 so any MOCK ASSERT 500 surfaces immediately.
+    const r2 = await runCLI(
+      ["--history-continue", firstId, "--prompt", "add a hat", "--output", out2],
+      {
+        NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}`,
+        NANOGEN_MAX_RETRIES: "0",
+      },
+      tmp
+    );
+    assert.equal(r2.status, 0,
+      `invocation 2 must exit 0; MOCK ASSERT fails 500; stderr=${r2.stderr}; stdout=${r2.stdout}`);
+    // If the mock rejected the sig, stderr would contain the MOCK ASSERT
+    // marker. Make this explicit for diagnosability.
+    assert.ok(!r2.stderr.includes("MOCK ASSERT"),
+      `mock server rejected continuation; stderr=${r2.stderr}`);
+    assert.ok(fs.existsSync(out2), "invocation 2 output file must exist");
+
+    const rowsAfter2 = readHistoryFile(tmp);
+    assert.equal(rowsAfter2.length, 2, "two history rows after call 2");
+    assert.equal(rowsAfter2[1].thoughtSignature, "sig-def",
+      "history[1].thoughtSignature must be the second mock sig");
+    assert.equal(rowsAfter2[1].parentId, firstId,
+      "history[1].parentId must equal invocation 1's id");
+    // Invocation 1's file must still be intact.
+    assert.deepEqual(fs.readFileSync(out1), TINY_PNG_BYTES,
+      "invocation 1's file must remain unmodified after continuation");
+
+    // Mock got exactly 2 requests (no retries).
+    assert.equal(mock.attempts, 2,
+      "mock server must have received exactly 2 requests");
+  } finally {
+    await closeMock(mock);
+    rmTmp(tmp);
+  }
+});
+
+// 8. Multi-image edit end-to-end: two --image refs + --region. Mock asserts
+// body.contents[0].parts shape is [text, inlineData, inlineData] in order.
+test("multi-image edit: body.contents[0].parts = [text, inlineData(a), inlineData(b)] in order", async () => {
+  const mock = await makeMock([
+    assertingHandler(
+      (body) => {
+        if (!Array.isArray(body.contents) || body.contents.length !== 1) {
+          throw new Error("contents must be a 1-turn array; got " +
+            (body.contents && body.contents.length));
+        }
+        const parts = body.contents[0].parts;
+        if (!Array.isArray(parts) || parts.length !== 3) {
+          throw new Error("parts must have length 3 (text + 2 inlineData); got " +
+            (parts && parts.length));
+        }
+        if (typeof parts[0].text !== "string" || parts[0].text.length === 0) {
+          throw new Error("parts[0] must be a non-empty text part");
+        }
+        if (!parts[1].inlineData || parts[1].inlineData.mimeType !== "image/png") {
+          throw new Error("parts[1] must be inlineData with PNG MIME");
+        }
+        if (!parts[2].inlineData || parts[2].inlineData.mimeType !== "image/png") {
+          throw new Error("parts[2] must be inlineData with PNG MIME");
+        }
+        // Both images in this test are the same tiny-1x1.png, so their data
+        // payloads must be IDENTICAL and equal the PNG's base64.
+        if (parts[1].inlineData.data !== TINY_PNG_B64 ||
+            parts[2].inlineData.data !== TINY_PNG_B64) {
+          throw new Error("parts[1..2].inlineData.data must be the PNG base64");
+        }
+        if (!parts[0].text.includes("Region:")) {
+          throw new Error("parts[0].text must contain 'Region:' suffix");
+        }
+      },
+      successBody()
+    ),
+  ]);
+  const tmp = mkTmp();
+  try {
+    // Copy the tiny PNG into the tmpdir twice under different names so the
+    // CLI has two distinct --image paths. The bytes match, which simplifies
+    // the mock assertion but still exercises the append-order path.
+    const imgA = path.join(tmp, "a.png");
+    const imgB = path.join(tmp, "b.png");
+    fs.copyFileSync(path.resolve(__dirname, "fixtures", "tiny-1x1.png"), imgA);
+    fs.copyFileSync(path.resolve(__dirname, "fixtures", "tiny-1x1.png"), imgB);
+
+    const outPath = path.join(tmp, "edited.png");
+    const r = await runCLI(
+      ["--image", imgA, "--image", imgB,
+       "--region", "apply ref's palette",
+       "--output", outPath],
+      {
+        NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}`,
+        NANOGEN_MAX_RETRIES: "0",
+      },
+      tmp
+    );
+    assert.equal(r.status, 0,
+      `exit 0 expected; stderr=${r.stderr}; stdout=${r.stdout}`);
+    assert.ok(!r.stderr.includes("MOCK ASSERT"),
+      `mock assertion failed; stderr=${r.stderr}`);
+    assert.ok(fs.existsSync(outPath), "output file must exist");
+    const rows = readHistoryFile(tmp);
+    assert.equal(rows.length, 1, "one history row");
+    assert.deepEqual(rows[0].inputImages, [imgA, imgB],
+      "history must record inputImages in command-line order");
+  } finally {
+    await closeMock(mock);
+    rmTmp(tmp);
+  }
+});
+
+// 9. Continuation refused by SAFETY on the second turn. Invocation 1
+// succeeds; invocation 2 the model returns finishReason SAFETY. CLI must
+// exit 1 with E_REFUSED; no output file for invocation 2; invocation 1's
+// file is still intact; history gets a SECOND row whose refusalReason is
+// "finish:SAFETY".
+test("continuation refused by SAFETY on second turn: E_REFUSED; prior output intact", async () => {
+  const mock = await makeMock([
+    (req, res) => respondJson(res, 200,
+      successBody({ thoughtSignature: "sig-ok" })),
+    (req, res) => respondJson(res, 200, refusalBody("SAFETY")),
+  ]);
+  const tmp = mkTmp();
+  try {
+    const out1 = path.join(tmp, "ok.png");
+    const out2 = path.join(tmp, "refused.png");
+
+    const r1 = await runCLI(
+      ["--prompt", "benign", "--output", out1],
+      { NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}` },
+      tmp
+    );
+    assert.equal(r1.status, 0, `call 1 must exit 0; stderr=${r1.stderr}`);
+    assert.ok(fs.existsSync(out1));
+    const rows1 = readHistoryFile(tmp);
+    assert.equal(rows1.length, 1);
+    assert.equal(rows1[0].thoughtSignature, "sig-ok");
+    const firstId = rows1[0].id;
+
+    const r2 = await runCLI(
+      ["--history-continue", firstId, "--prompt", "edge case", "--output", out2],
+      {
+        NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}`,
+        NANOGEN_MAX_RETRIES: "0",
+      },
+      tmp
+    );
+    assert.equal(r2.status, 1,
+      `call 2 must exit 1 on SAFETY refusal; stderr=${r2.stderr}; stdout=${r2.stdout}`);
+    const out = parseLastJsonLine(r2.stdout);
+    assert.equal(out.success, false);
+    assert.equal(out.code, "E_REFUSED");
+    assert.equal(out.error, "finish:SAFETY");
+    assert.ok(!fs.existsSync(out2), "refused call must NOT write output");
+
+    const rows2 = readHistoryFile(tmp);
+    assert.equal(rows2.length, 2,
+      "two history rows — refusals still append a row");
+    assert.equal(rows2[1].refusalReason, "finish:SAFETY");
+    assert.equal(rows2[1].parentId, firstId,
+      "refused continuation still records parentId");
+    // Invocation 1's file is still untouched.
+    assert.deepEqual(fs.readFileSync(out1), TINY_PNG_BYTES,
+      "prior output must remain intact");
+  } finally {
+    await closeMock(mock);
+    rmTmp(tmp);
+  }
+});
+
+// 10. --history-continue + --dry-run performs ZERO HTTP. The mock server
+// sees no requests. Stdout JSON is a dry-run preview with the 3-turn shape.
+test("dry-run continuation: zero HTTP traffic; stdout is a 3-turn dryRun preview", async () => {
+  const mock = await makeMock([
+    // Should NEVER fire — dry-run short-circuits before fetchWithRetry.
+    (req, res) => respondJson(res, 500,
+      { error: { message: "mock must not receive a request in dry-run" } }),
+  ]);
+  const tmp = mkTmp();
+  try {
+    // Pre-seed a continuable history row + its output file. Without these
+    // the continuation fails validation (E_CONTINUE_UNKNOWN_ID).
+    const priorOutput = path.join(tmp, "cat.png");
+    fs.copyFileSync(path.resolve(__dirname, "fixtures", "tiny-1x1.png"),
+      priorOutput);
+    const historyRow = {
+      id: "cat-dryrun",
+      timestamp: "2026-04-17T12:00:00.000Z",
+      prompt: "cat",
+      output: priorOutput,
+      params: {
+        model: "gemini-3.1-flash-image-preview",
+        aspectRatio: "1:1",
+        imageSize: "1K",
+        thinkingLevel: null,
+        seed: null,
+        temperature: null,
+        styles: [],
+      },
+      parentId: null,
+      bytes: 67,
+      outputFormat: "png",
+      outputExtension: "png",
+      refusalReason: null,
+      thoughtSignature: "sig-dry",
+    };
+    fs.writeFileSync(path.join(tmp, ".nanogen-history.jsonl"),
+      JSON.stringify(historyRow) + "\n");
+
+    const out2 = path.join(tmp, "hat.png");
+    const r = await runCLI(
+      ["--history-continue", "cat-dryrun",
+       "--prompt", "add a hat",
+       "--output", out2,
+       "--dry-run"],
+      {
+        NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}`,
+        NANOGEN_MAX_RETRIES: "0",
+      },
+      tmp
+    );
+    assert.equal(r.status, 0,
+      `dry-run must exit 0; stderr=${r.stderr}; stdout=${r.stdout}`);
+    assert.ok(r.stdout.startsWith('{"dryRun":true,'),
+      `stdout must start with the dryRun preview prefix; got: ${r.stdout.slice(0, 120)}`);
+
+    const preview = JSON.parse(r.stdout);
+    assert.equal(preview.dryRun, true);
+    assert.ok(preview.body && Array.isArray(preview.body.contents),
+      "dry-run preview must include body.contents");
+    assert.equal(preview.body.contents.length, 3,
+      "continuation preview must have 3 turns");
+    assert.equal(preview.body.contents[0].role, "user");
+    assert.equal(preview.body.contents[1].role, "model");
+    assert.equal(preview.body.contents[2].role, "user");
+    // Sig must be present byte-for-byte on the model turn even in dry-run.
+    assert.equal(
+      preview.body.contents[1].parts[1].thoughtSignature,
+      "sig-dry",
+      "dry-run preview must carry thoughtSignature on contents[1].parts[1]"
+    );
+
+    // No output file on disk (dry-run does not write).
+    assert.ok(!fs.existsSync(out2), "dry-run must not write output file");
+    // Mock server received ZERO requests — the crux of the dry-run contract.
+    assert.equal(mock.attempts, 0,
+      `mock must see ZERO HTTP traffic during dry-run; got ${mock.attempts}`);
+  } finally {
+    await closeMock(mock);
+    rmTmp(tmp);
+  }
+});
+
 runAll();

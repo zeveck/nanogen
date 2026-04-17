@@ -1,11 +1,15 @@
 # nanogen
 
-Zero-dependency Node.js CLI for generating images via Google's Gemini
-Nano Banana models. Implements the `/nanogen` skill's core generation
-path (CLI core, style catalog, HTTP with retry, JSONL history).
-See [`plans/SUB_1_CLI_CORE.md`](../../plans/SUB_1_CLI_CORE.md) for the
-authoritative spec. User-facing `SKILL.md` / `reference.md` land with
-sub-plan 3.
+Zero-dependency Node.js CLI for generating and editing images via
+Google's Gemini Nano Banana models. Supports single-turn generation,
+multi-image edits (up to 14 references), natural-language region
+guidance, and multi-turn continuation with `thoughtSignature`
+round-tripping (the Gemini 3 correctness fix).
+
+See [`plans/SUB_1_CLI_CORE.md`](../../plans/SUB_1_CLI_CORE.md) and
+[`plans/SUB_2_EDIT_FLOW.md`](../../plans/SUB_2_EDIT_FLOW.md) for the
+authoritative specs. User-facing `SKILL.md` / `reference.md` for agent
+integration land with sub-plan 3.
 
 Requires **Node.js >= 20.12** (`process.loadEnvFile` and
 `AbortSignal.timeout` are both used).
@@ -19,6 +23,9 @@ Requires **Node.js >= 20.12** (`process.loadEnvFile` and
 Before running set your API key:
 
     export GEMINI_API_KEY=... # get one at https://aistudio.google.com/app/apikey
+
+See [Examples](#examples) below for multi-image edit, region-only edit,
+and multi-turn continuation patterns.
 
 ## CLI flags
 
@@ -136,6 +143,52 @@ mode: `GEMINI_API_KEY=""` blocks `.env` from supplying a real value).
 These are documented here, not in `--help`, so user-facing help text
 stays focused.
 
+## Examples
+
+    # Single-turn generate.
+    nanogen --prompt "a red apple on a marble table" --output apple.png
+
+    # Multi-image composition (first image = primary subject; order matters).
+    nanogen --image subject.png --image style-ref.png \
+            --prompt "apply the palette from the second image to the first" \
+            --output styled.png
+
+    # Region-only edit — no --prompt needed when --region is given.
+    nanogen --image cat.png --region "replace the background with a beach" \
+            --output cat-beach.png
+
+    # Multi-turn continuation — round-trips thoughtSignature across two
+    # invocations. Each invocation is independent (re-reads history).
+    nanogen --prompt "cat" --output cat.png
+    # → { "success": true, "historyId": "cat-abc12345", ... }
+    nanogen --history-continue cat-abc12345 \
+            --prompt "add a hat" \
+            --output cat-hat.png
+
+## Limitations
+
+- **No bitmap masks.** `--region` is natural language only; Gemini has
+  no mask parameter. `--region "the upper-left quadrant"` usually
+  works; `--region "pixels 400-600 on X axis"` does not.
+- **No N > 2 turn chains in a single invocation.** `--history-continue`
+  is exactly one step deep (one prior turn + one new turn). Longer
+  chains happen by running `nanogen` repeatedly, each invocation
+  `--history-continue`-ing the prior output.
+- **SynthID watermarking is implicit and non-configurable.** All
+  Nano Banana outputs carry Google's SynthID watermark. There is no
+  flag to disable it, and no detector in this CLI.
+- **Workspace-admin lock-out is possible.** Google Workspace
+  administrators may disable image generation at the tenant level; API
+  calls then 403 regardless of key validity.
+- **Default-off safety settings.** nanogen does NOT send
+  `safetySettings` unless the user passes `--safety`. This matches the
+  API default, but it means policy is controlled by the server-side
+  default thresholds, not the CLI.
+- **No SDK — raw HTTP only.** Zero-dependency is a design goal; no
+  `@google/genai`, no `@google/generative-ai`.
+- **No Batch API, no Vertex AI, no async operations.** Every
+  invocation is a single synchronous `generateContent` call.
+
 ## Tests
 
 From `build/nanogen/`:
@@ -147,6 +200,17 @@ response_parser, http_retry, env, history, integration,
 edit_multi_image, multi_turn). All tests run offline — the HTTP suites
 use an in-process `node:http` mock server on `127.0.0.1`. Zero outbound
 requests during `npm test`.
+
+### Integration test coverage
+
+`tests/test_integration.cjs` exercises the full CLI end-to-end against
+an in-process mock server: successful generate + retry ladder + refusal
+path (sub-plan 1 Phase 4), plus multi-turn round-trip + multi-image
+edit + continuation-refused-by-SAFETY + dry-run-no-HTTP (sub-plan 2
+Phase 3). The two-call round-trip is the Gemini-3 correctness proof:
+invocation 1 persists `thoughtSignature`; invocation 2 reads it back
+and the mock server asserts it is present byte-for-byte at
+`body.contents[1].parts[1].thoughtSignature`.
 
 ## Edit mode
 
@@ -257,5 +321,6 @@ The warning does NOT block the request; model switches mid-conversation
 are technically allowed but almost always produce 400 on signature
 format mismatch.
 
-Sub-plan 2 Phase 3 adds an end-to-end integration test demonstrating
-the round-trip against the in-process mock server.
+Sub-plan 3 ships `SKILL.md` / `reference.md` for agent integration —
+this README is for direct CLI users. The multi-turn round-trip is
+covered end-to-end by `tests/test_integration.cjs`.
