@@ -1214,10 +1214,26 @@ function resolveApiKey() {
     );
     return { key: presetGoogle, source: "env:GOOGLE_API_KEY" };
   }
-  // Step 2: walk .env — cwd upward FIRST, then __dirname upward.
-  const found = findDotenvFile();
-  for (const p of found) {
-    const parsed = parseDotenvSync(p);
+  // Step 2: .env lookup. If NANOGEN_DOTENV_PATH is set, consult ONLY that
+  // path (no walking). This is a test-isolation hook: tests working in a
+  // tempdir pin the path to their controlled .env and bypass the walker
+  // entirely, preventing the production walker from reaching the repo's
+  // real .env via __dirname. In production (env var unset) the walker
+  // runs normally: cwd upward first, then __dirname upward.
+  const explicit = process.env.NANOGEN_DOTENV_PATH;
+  const candidates = (typeof explicit === "string" && explicit.length > 0)
+    ? [explicit]
+    : findDotenvFile();
+  for (const p of candidates) {
+    let parsed;
+    try {
+      parsed = parseDotenvSync(p);
+    } catch (_) {
+      // Missing file or unreadable — skip. Matches findDotenvFile's silent
+      // behavior. For NANOGEN_DOTENV_PATH=/nonexistent this returns null,
+      // which is what the "no .env anywhere" test wants.
+      continue;
+    }
     if (parsed.GEMINI_API_KEY) {
       return { key: parsed.GEMINI_API_KEY, source: `.env:${p}:GEMINI_API_KEY` };
     }

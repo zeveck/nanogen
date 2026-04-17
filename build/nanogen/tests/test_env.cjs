@@ -26,6 +26,7 @@ const NUKE_KEYS = [
   "NANOGEN_RETRY_BASE_MS",
   "NANOGEN_FETCH_TIMEOUT_MS",
   "NANOGEN_MAX_RETRIES",
+  "NANOGEN_DOTENV_PATH",
 ];
 
 function withCleanEnv(fn) {
@@ -146,23 +147,30 @@ test("Both set → GEMINI wins, no stderr warning", () => {
   });
 });
 
+// Tests 4-9 and 12 exercise the .env walker. To isolate from the repo's
+// own .env (whose __dirname walk would otherwise reach it from the
+// installed skill location), each test pins NANOGEN_DOTENV_PATH to a
+// known file. The walker is thereby unused; the resolver reads ONLY the
+// pinned file. This matches the production env-var override pattern
+// documented in README (test-only hook, unset in normal use).
+
 // 4. Empty GEMINI_API_KEY (both env vars also absent or empty GOOGLE) falls
 //    through to .env. This is the CRITICAL reproducer (plan rationale #2).
 test("empty GEMINI_API_KEY falls through to .env lookup", () => {
   const dir = mkTmp();
   try {
-    fs.writeFileSync(path.join(dir, ".env"), "GEMINI_API_KEY=from-dotenv\n");
+    const envFile = path.join(dir, ".env");
+    fs.writeFileSync(envFile, "GEMINI_API_KEY=from-dotenv\n");
     const r = spawnSync(
       process.execPath,
       ["-e", `
         process.env.GEMINI_API_KEY = "";
         process.env.GOOGLE_API_KEY = "";
-        process.chdir(${JSON.stringify(dir)});
         const g = require(${JSON.stringify(CLI)});
         const out = g.resolveApiKey();
         process.stdout.write(JSON.stringify(out));
       `],
-      { env: cleanSubprocessEnv(), encoding: "utf8" }
+      { env: cleanSubprocessEnv({ NANOGEN_DOTENV_PATH: envFile }), encoding: "utf8" }
     );
     assert.equal(r.status, 0, `subprocess failed: ${r.stderr}`);
     const ret = JSON.parse(r.stdout);
@@ -175,20 +183,23 @@ test("empty GEMINI_API_KEY falls through to .env lookup", () => {
   }
 });
 
-// 5. Neither env var set; .env in cwd with GEMINI_API_KEY=foo → returns "foo".
-test(".env in cwd with GEMINI_API_KEY=foo → returns foo", () => {
+// 5. Neither env var set; NANOGEN_DOTENV_PATH points at a .env containing
+//    GEMINI_API_KEY=foo → returns "foo". (Replaces the pre-override cwd-walk
+//    test; the walker is separately exercised by test 6 using a dedicated
+//    hermetic helper.)
+test(".env pinned via NANOGEN_DOTENV_PATH → returns its value", () => {
   const dir = mkTmp();
   try {
-    fs.writeFileSync(path.join(dir, ".env"), "GEMINI_API_KEY=foo\n");
+    const envFile = path.join(dir, ".env");
+    fs.writeFileSync(envFile, "GEMINI_API_KEY=foo\n");
     const r = spawnSync(
       process.execPath,
       ["-e", `
-        process.chdir(${JSON.stringify(dir)});
         const g = require(${JSON.stringify(CLI)});
         const out = g.resolveApiKey();
         process.stdout.write(JSON.stringify(out));
       `],
-      { env: cleanSubprocessEnv(), encoding: "utf8" }
+      { env: cleanSubprocessEnv({ NANOGEN_DOTENV_PATH: envFile }), encoding: "utf8" }
     );
     assert.equal(r.status, 0, `subprocess failed: ${r.stderr}`);
     const ret = JSON.parse(r.stdout);
@@ -198,28 +209,29 @@ test(".env in cwd with GEMINI_API_KEY=foo → returns foo", () => {
   }
 });
 
-// 6. .env two dirs up from cwd → walker finds it.
-test(".env two dirs up → walker finds it", () => {
+// 6. cwd-walker finds .env two dirs up. This test DOES exercise the walker
+//    directly (NANOGEN_DOTENV_PATH unset). To keep isolation we directly
+//    call findDotenvFile() with cwd already chdir'd to the sub dir; the
+//    assertion checks that the tempdir's .env appears in the walk result,
+//    NOT the real repo's .env.
+test("cwd-walker finds .env two dirs up", () => {
   const dir = mkTmp();
+  const origCwd = process.cwd();
   try {
     const sub = path.join(dir, "a", "b");
     fs.mkdirSync(sub, { recursive: true });
-    fs.writeFileSync(path.join(dir, ".env"), "GEMINI_API_KEY=uplevel\n");
-    const r = spawnSync(
-      process.execPath,
-      ["-e", `
-        process.chdir(${JSON.stringify(sub)});
-        const g = require(${JSON.stringify(CLI)});
-        const out = g.resolveApiKey();
-        process.stdout.write(JSON.stringify(out));
-      `],
-      { env: cleanSubprocessEnv(), encoding: "utf8" }
-    );
-    assert.equal(r.status, 0, `subprocess failed: ${r.stderr}`);
-    const ret = JSON.parse(r.stdout);
-    assert.ok(ret, "expected walker to find .env two dirs up");
-    assert.equal(ret.key, "uplevel");
+    const envFile = path.join(dir, ".env");
+    fs.writeFileSync(envFile, "GEMINI_API_KEY=uplevel\n");
+    process.chdir(sub);
+    const found = GEN.findDotenvFile();
+    // The walker WILL also find /workspaces/nanogen/.env via __dirname; that
+    // is production-correct behaviour. We only assert the tempdir's .env
+    // appears in the walk (order is cwd-first, so it should be index 0 if
+    // nothing else is present between sub and dir).
+    assert.ok(found.includes(envFile),
+      `expected walker result to include ${envFile}; got ${JSON.stringify(found)}`);
   } finally {
+    process.chdir(origCwd);
     rmTmp(dir);
   }
 });
@@ -228,16 +240,16 @@ test(".env two dirs up → walker finds it", () => {
 test("GEMINI_API_KEY=\"\" in .env → treated as absent", () => {
   const dir = mkTmp();
   try {
-    fs.writeFileSync(path.join(dir, ".env"), `GEMINI_API_KEY=""\n`);
+    const envFile = path.join(dir, ".env");
+    fs.writeFileSync(envFile, `GEMINI_API_KEY=""\n`);
     const r = spawnSync(
       process.execPath,
       ["-e", `
-        process.chdir(${JSON.stringify(dir)});
         const g = require(${JSON.stringify(CLI)});
         const out = g.resolveApiKey();
         process.stdout.write(JSON.stringify(out));
       `],
-      { env: cleanSubprocessEnv(), encoding: "utf8" }
+      { env: cleanSubprocessEnv({ NANOGEN_DOTENV_PATH: envFile }), encoding: "utf8" }
     );
     assert.equal(r.status, 0, `subprocess failed: ${r.stderr}`);
     assert.equal(r.stdout, "null",
@@ -248,15 +260,18 @@ test("GEMINI_API_KEY=\"\" in .env → treated as absent", () => {
 });
 
 // 8. No env, no .env → null → CLI exits with E_MISSING_API_KEY.
+//    Pin NANOGEN_DOTENV_PATH to a nonexistent path so the walker is
+//    bypassed AND the pinned file can't be read → resolver returns null.
 test("no env, no .env → CLI exits with E_MISSING_API_KEY", () => {
   const dir = mkTmp();
   try {
-    // no .env; build a minimal output path inside tmpdir.
     const outPath = path.join(dir, "out.png");
+    const nonexistent = path.join(dir, ".env-never-created");
     const r = spawnSync(
       process.execPath,
       [CLI, "--prompt", "hello", "--output", outPath],
-      { env: cleanSubprocessEnv(), cwd: dir, encoding: "utf8" }
+      { env: cleanSubprocessEnv({ NANOGEN_DOTENV_PATH: nonexistent }),
+        cwd: dir, encoding: "utf8" }
     );
     assert.equal(r.status, 1, `expected exit 1; got ${r.status}`);
     const out = JSON.parse(r.stdout.trim().split("\n").pop());
@@ -271,16 +286,16 @@ test("no env, no .env → CLI exits with E_MISSING_API_KEY", () => {
 test(".env with quoted value → quotes stripped", () => {
   const dir = mkTmp();
   try {
-    fs.writeFileSync(path.join(dir, ".env"), `GEMINI_API_KEY="with spaces"\n`);
+    const envFile = path.join(dir, ".env");
+    fs.writeFileSync(envFile, `GEMINI_API_KEY="with spaces"\n`);
     const r = spawnSync(
       process.execPath,
       ["-e", `
-        process.chdir(${JSON.stringify(dir)});
         const g = require(${JSON.stringify(CLI)});
         const out = g.resolveApiKey();
         process.stdout.write(JSON.stringify(out));
       `],
-      { env: cleanSubprocessEnv(), encoding: "utf8" }
+      { env: cleanSubprocessEnv({ NANOGEN_DOTENV_PATH: envFile }), encoding: "utf8" }
     );
     assert.equal(r.status, 0, `subprocess failed: ${r.stderr}`);
     const ret = JSON.parse(r.stdout);
@@ -340,28 +355,30 @@ test("parseDotenvSync skips comments and blank lines", () => {
   }
 });
 
-// 12. Closest .env wins (cwd before parent).
-test("closest .env wins over parent", () => {
+// 12. Closest .env wins (cwd before parent). Exercises the walker's
+//     ordering directly via findDotenvFile() — no subprocess, so the real
+//     repo's .env may also appear later in the walk but must not appear
+//     BEFORE the tempdir's two .env files.
+test("closest .env wins over parent (walker order)", () => {
   const dir = mkTmp();
+  const origCwd = process.cwd();
   try {
     const sub = path.join(dir, "inner");
     fs.mkdirSync(sub);
-    fs.writeFileSync(path.join(dir, ".env"), "GEMINI_API_KEY=parent-val\n");
-    fs.writeFileSync(path.join(sub, ".env"), "GEMINI_API_KEY=child-val\n");
-    const r = spawnSync(
-      process.execPath,
-      ["-e", `
-        process.chdir(${JSON.stringify(sub)});
-        const g = require(${JSON.stringify(CLI)});
-        const out = g.resolveApiKey();
-        process.stdout.write(JSON.stringify(out));
-      `],
-      { env: cleanSubprocessEnv(), encoding: "utf8" }
-    );
-    assert.equal(r.status, 0, `subprocess failed: ${r.stderr}`);
-    const ret = JSON.parse(r.stdout);
-    assert.equal(ret.key, "child-val", "closest .env should win");
+    const parentEnv = path.join(dir, ".env");
+    const childEnv = path.join(sub, ".env");
+    fs.writeFileSync(parentEnv, "GEMINI_API_KEY=parent-val\n");
+    fs.writeFileSync(childEnv, "GEMINI_API_KEY=child-val\n");
+    process.chdir(sub);
+    const found = GEN.findDotenvFile();
+    const iChild = found.indexOf(childEnv);
+    const iParent = found.indexOf(parentEnv);
+    assert.ok(iChild !== -1, `child .env must be in walk result; got ${JSON.stringify(found)}`);
+    assert.ok(iParent !== -1, `parent .env must be in walk result; got ${JSON.stringify(found)}`);
+    assert.ok(iChild < iParent,
+      `child .env must come before parent in walk order; child=${iChild}, parent=${iParent}`);
   } finally {
+    process.chdir(origCwd);
     rmTmp(dir);
   }
 });
