@@ -56,7 +56,7 @@ SynthID detector, multi-provider abstraction, UI/GUI.
 ## Progress Tracker
 | Phase | Status | Commit | Notes |
 |-------|--------|--------|-------|
-| 1 — Scaffold + arg parser + help + dry-run | ⬚ | | |
+| 1 — Scaffold + arg parser + help + dry-run | ✅ Done | `ae67fde` | 30/30 tests pass |
 | 2 — Style catalog (styles.json + loader + `--style`) | ⬚ | | |
 | 3 — Pure request builder + response parser | ⬚ | | |
 | 4 — HTTP client: retry + error mapping + env var | ⬚ | | |
