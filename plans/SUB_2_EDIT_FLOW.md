@@ -39,7 +39,7 @@ this file before execution.
 ## Progress Tracker
 | Phase | Status | Commit | Notes |
 |-------|--------|--------|-------|
-| 1 — Multi-image assembly + `--region` flag | ⬚ | | |
+| 1 — Multi-image assembly + `--region` flag | ✅ Done | `054ccab` | 18 new tests; 6 goldens (1/2/5/14 images + region-only + full-featured); aggregate 144 tests |
 | 2 — `--history-continue` + multi-turn + thoughtSignature | ⬚ | | |
 | 3 — Integration via mock server + README update | ⬚ | | |
 
