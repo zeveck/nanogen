@@ -1,3 +1,7 @@
 .zskills/tracking/
 .test-results.txt
 .playwright/output/
+
+# API key — never commit. /nanogen (and many other tools) reads
+# GEMINI_API_KEY from a local .env file at the repo root.
+.env

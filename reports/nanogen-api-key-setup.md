@@ -28,20 +28,19 @@ status: awaiting-user-verification
    ```bash
    echo 'GEMINI_API_KEY=AIza...paste-your-actual-key-here...' \
      > /workspaces/nanogen/.env
-   grep -q '^\.env$' /workspaces/nanogen/.gitignore \
-     || echo '.env' >> /workspaces/nanogen/.gitignore
    ```
 
-   After the `echo`, the file `/workspaces/nanogen/.env` contains
-   one line:
+   After that command, `/workspaces/nanogen/.env` contains one
+   line:
 
    ```
    GEMINI_API_KEY=AIza...paste-your-actual-key-here...
    ```
 
-   This matches imagegen's pattern; the CLI walks up from cwd to
-   find `.env`. (Section 3 has alternatives if you prefer shell
-   `export`.)
+   `.env` is already in `/workspaces/nanogen/.gitignore` so the
+   file is safe from accidental commits. This matches imagegen's
+   pattern; the CLI walks up from cwd to find `.env`. (Section 3
+   has alternatives if you prefer shell `export`.)
 
 3. **Tell me you're ready.** I'll verify the implementation end-to-
    end (~$0.10 spend). Once clean, you test the skill via
@@ -172,12 +171,9 @@ echo 'GEMINI_API_KEY=AIza...paste-your-actual-key-here...' \
   > /workspaces/nanogen/.env
 ```
 
-Make sure `.env` is gitignored:
-
-```bash
-grep -q '^\.env$' /workspaces/nanogen/.gitignore \
-  || echo '.env' >> /workspaces/nanogen/.gitignore
-```
+`.env` is already listed in `/workspaces/nanogen/.gitignore` (as
+part of the `/nanogen` install), so git won't pick it up. Verify
+with `git check-ignore -v .env` if you want to double-check.
 
 The CLI walks up the directory tree from cwd looking for `.env`,
 so this works whether you invoke from the repo root, a
