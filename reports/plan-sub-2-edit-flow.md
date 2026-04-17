@@ -1,5 +1,52 @@
 # Plan Report — SUB_2_EDIT_FLOW
 
+## Phase — 2 `--history-continue` + Multi-Turn + thoughtSignature
+
+**Plan:** plans/SUB_2_EDIT_FLOW.md
+**Status:** Done
+**Commit:** `2f8dca7` on main
+**Landing mode:** direct-to-main
+
+### Work Items
+| # | Item | Status |
+|---|------|--------|
+| 1 | `--history-continue <id>` flag added | Done |
+| 2 | `buildContinuationRequestFromMaterials` pure function with 3-turn role-annotated contents | Done |
+| 3 | `resolveContinuation` helper enforcing 6 E_CONTINUE_* codes | Done |
+| 4 | thoughtSignature preserved verbatim in body | Done |
+| 5 | `OUTPUT_FORMAT_TO_MIME` map + magic-byte fallback | Done |
+| 6 | Model-mismatch pinned stderr warning | Done |
+| 7 | No replay of prior user images (documented contract) | Done |
+| 8 | Continuation mode relaxes rules 2/22 (prior model-turn image implicit) | Done |
+| 9 | `parentId` wired to `priorEntry.id` for continuation history rows | Done |
+| 10 | 3 request goldens + 3 history JSONL fixtures | Done |
+| 11 | `tests/test_multi_turn.cjs` ≥14 tests | Done (16) |
+| 12 | README "Multi-turn continuation" section + error codes table | Done |
+
+### Verification
+- `cd build/nanogen && npm test` → exit 0
+- 10 test files: 30 + 21 + 14 + 21 + 13 + 12 + 9 + 6 + 18 + 16 = **160 passing**
+- SUB_1 (126) + SUB_2 Phase 1 (18) still green
+- thoughtSignature round-trip verified via golden (`body.contents[1].parts[1].thoughtSignature === "sig-abc"`)
+- All 6 E_CONTINUE_* codes exercised
+
+### Deviations
+- `composePromptText` extended to apply edit-mode boilerplate (`"Edit the provided image(s)."`) in continuation mode with `--region` and no `--prompt`. Prior model-turn image plays the same semantic role as a current-turn `--image` — avoids a leading-space text artifact. Pinned by golden.
+- Continuation mode relaxes rules 2 + 22 (the prior model-turn image implicitly satisfies the "image required" constraint); rule 23 (`E_EDIT_NEEDS_INSTRUCTION`) still fires if neither `--prompt` nor `--region` is supplied.
+- Shipped 16 tests (≥14 floor).
+
+### Gaps
+Self-identified by the implementer:
+- `parentId` wiring in history entries not exercised by a dedicated unit test here (tests use `--dry-run`). Phase 3's integration tests will cover it end-to-end per the plan's AC.
+- `E_CONTINUE_MISSING_OUTPUT` only tested with ENOENT path; EACCES / permission-denied paths share the same code path but aren't separately asserted.
+
+Neither is a spec gap — flagged for future coverage opportunistically.
+
+### Next
+- **SUB_2 Phase 3** — integration test via mock server that round-trips a 2-turn conversation (first call captures sig, second call includes sig in request body), plus README polish to sub-plan-2-complete form.
+
+---
+
 ## Phase — 1 Multi-Image Assembly + `--region` Flag
 
 **Plan:** plans/SUB_2_EDIT_FLOW.md

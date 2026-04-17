@@ -40,7 +40,7 @@ this file before execution.
 | Phase | Status | Commit | Notes |
 |-------|--------|--------|-------|
 | 1 — Multi-image assembly + `--region` flag | ✅ Done | `054ccab` | 18 new tests; 6 goldens (1/2/5/14 images + region-only + full-featured); aggregate 144 tests |
-| 2 — `--history-continue` + multi-turn + thoughtSignature | ⬚ | | |
+| 2 — `--history-continue` + multi-turn + thoughtSignature | ✅ Done | `2f8dca7` | 16 new tests; 3 req goldens + 3 history JSONL fixtures; 6 E_CONTINUE_* codes; aggregate 160 |
 | 3 — Integration via mock server + README update | ⬚ | | |
 
 ## Phase 1 — Multi-Image Assembly + `--region` Flag
