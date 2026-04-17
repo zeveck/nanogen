@@ -938,6 +938,14 @@ function buildContinuationRequestFromMaterials(
   // Turn 2 (historical model). inlineData (prior output bytes) +
   // thoughtSignature verbatim. This is the critical Gemini-3 gotcha:
   // the sig must be byte-for-byte identical to what the API returned.
+  //
+  // Gemini requires the thoughtSignature to live ON the SAME part object
+  // as the inlineData, not as a sibling part. Splitting them yields:
+  //   400: "Image part is missing a thought_signature in content
+  //         position 2, part position 1"
+  // (per the live API, 2026-04-17 — Flash 3.1). The parseResponse
+  // reader handles the field appearing anywhere on the part, so merging
+  // here is safe for round-trip.
   const modelTurn = {
     role: "model",
     parts: [
@@ -946,8 +954,8 @@ function buildContinuationRequestFromMaterials(
           mimeType: priorMime,
           data: priorBytes.toString("base64"),
         },
+        thoughtSignature: priorEntry.thoughtSignature,
       },
-      { thoughtSignature: priorEntry.thoughtSignature },
     ],
   };
 

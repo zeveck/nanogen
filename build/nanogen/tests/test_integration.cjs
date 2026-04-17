@@ -456,15 +456,24 @@ test("round-trip: invocation 2 sends prior thoughtSignature in continuation body
         if (body.contents[2].role !== "user") {
           throw new Error("contents[2].role must be 'user'");
         }
+        // Gemini requires the thoughtSignature to live on the SAME part
+        // as the inlineData (not as a sibling part). See
+        // buildContinuationRequestFromMaterials for the live-API error
+        // that motivated this layout.
         const modelParts = body.contents[1].parts;
-        if (!Array.isArray(modelParts) || modelParts.length < 2) {
-          throw new Error("model turn must have >= 2 parts (inlineData + sig)");
+        if (!Array.isArray(modelParts) || modelParts.length < 1) {
+          throw new Error("model turn must have >= 1 part (inlineData+sig)");
         }
-        const sigPart = modelParts[1];
-        if (!sigPart || sigPart.thoughtSignature !== "sig-xyz") {
+        const imgPart = modelParts[0];
+        if (!imgPart || !imgPart.inlineData) {
           throw new Error(
-            "contents[1].parts[1].thoughtSignature must equal 'sig-xyz'; got " +
-            JSON.stringify(sigPart));
+            "contents[1].parts[0] must carry inlineData; got " +
+            JSON.stringify(imgPart));
+        }
+        if (imgPart.thoughtSignature !== "sig-xyz") {
+          throw new Error(
+            "contents[1].parts[0].thoughtSignature must equal 'sig-xyz'; got " +
+            JSON.stringify(imgPart.thoughtSignature));
         }
       },
       successBody({ thoughtSignature: "sig-def" })
@@ -730,10 +739,11 @@ test("dry-run continuation: zero HTTP traffic; stdout is a 3-turn dryRun preview
     assert.equal(preview.body.contents[1].role, "model");
     assert.equal(preview.body.contents[2].role, "user");
     // Sig must be present byte-for-byte on the model turn even in dry-run.
+    // Gemini requires it on the SAME part as the inlineData.
     assert.equal(
-      preview.body.contents[1].parts[1].thoughtSignature,
+      preview.body.contents[1].parts[0].thoughtSignature,
       "sig-dry",
-      "dry-run preview must carry thoughtSignature on contents[1].parts[1]"
+      "dry-run preview must carry thoughtSignature on contents[1].parts[0]"
     );
 
     // No output file on disk (dry-run does not write).

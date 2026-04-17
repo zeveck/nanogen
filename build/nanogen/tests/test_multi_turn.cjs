@@ -190,7 +190,7 @@ test("golden: request-continue-basic.json (prompt-only current turn)", () => {
 // (2) thoughtSignature preserved verbatim.
 // ---------------------------------------------------------------------------
 
-test("thoughtSignature preserved byte-for-byte in contents[1].parts[1]", () => {
+test("thoughtSignature preserved byte-for-byte on the inlineData part", () => {
   withCleanEnv(() => {
     const sig = "sig-abc\n\u0000weird\t\"quoted\"chars";
     const args = baseArgs({
@@ -210,10 +210,17 @@ test("thoughtSignature preserved byte-for-byte in contents[1].parts[1]", () => {
     const r = gen.buildContinuationRequestFromMaterials(
       args, [], stylesIndex, priorEntry, TINY_PNG_BYTES, "image/png"
     );
+    // Gemini requires the signature on the SAME part as the inlineData,
+    // not as a sibling part. See generate.cjs buildContinuationRequest-
+    // FromMaterials for rationale + live-API error.
     assert.equal(
-      r.body.contents[1].parts[1].thoughtSignature,
+      r.body.contents[1].parts[0].thoughtSignature,
       sig,
-      "thoughtSignature must be preserved byte-for-byte"
+      "thoughtSignature must be preserved byte-for-byte on the image part"
+    );
+    assert.ok(
+      r.body.contents[1].parts[0].inlineData,
+      "the same part must also carry the inlineData"
     );
   });
 });
@@ -543,7 +550,7 @@ test("tolerant reader: malformed lines are skipped, valid entry is found", () =>
     assert.equal(res.status, 0, `stdout=${res.stdout} stderr=${res.stderr}`);
     const j = JSON.parse(res.stdout.trim());
     assert.equal(j.dryRun, true);
-    assert.equal(j.body.contents[1].parts[1].thoughtSignature, "sig-abc");
+    assert.equal(j.body.contents[1].parts[0].thoughtSignature, "sig-abc");
   } finally {
     rmScratch(dir);
   }
@@ -629,7 +636,7 @@ test("magic-byte fallback: outputFormat=null but bytes are PNG → continuation 
     assert.equal(res.status, 0, `stdout=${res.stdout} stderr=${res.stderr}`);
     const j = JSON.parse(res.stdout.trim());
     assert.equal(j.body.contents[1].parts[0].inlineData.mimeType, "image/png");
-    assert.equal(j.body.contents[1].parts[1].thoughtSignature, "sig-fb");
+    assert.equal(j.body.contents[1].parts[0].thoughtSignature, "sig-fb");
   } finally {
     rmScratch(dir);
   }

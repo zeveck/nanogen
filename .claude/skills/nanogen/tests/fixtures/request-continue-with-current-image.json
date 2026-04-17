@@ -21,9 +21,7 @@
             "inlineData": {
               "mimeType": "image/png",
               "data": "<tiny-1x1-base64>"
-            }
-          },
-          {
+            },
             "thoughtSignature": "sig-abc"
           }
         ]
