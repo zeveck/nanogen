@@ -14,50 +14,145 @@ status: awaiting-user-verification
 
 ## 1. TL;DR
 
-```text
-1. Get a key:  https://aistudio.google.com/app/apikey
-2. Set env:    export GEMINI_API_KEY=<your-key>
-3. Test:       node .claude/skills/nanogen/generate.cjs --prompt test --output /tmp/t.png --dry-run
-```
-
-The dry-run in step 3 needs no key and spends nothing. Real
-generations cost as little as ~$0.022 each (see section 5).
+1. **Get a key** at https://aistudio.google.com/app/apikey →
+   click "Create API key" → "Create API key in new project".
+   (AI Studio auto-creates a GCP project for you; no Cloud Console
+   setup needed. See section 2 for detail.)
+2. **Put it in `.env`** (matches imagegen's pattern):
+   ```bash
+   echo 'GEMINI_API_KEY=AIza...YOUR-KEY...' > /workspaces/nanogen/.env
+   grep -q '^\.env$' /workspaces/nanogen/.gitignore \
+     || echo '.env' >> /workspaces/nanogen/.gitignore
+   ```
+3. **Tell me you're ready.** I'll verify the implementation end-to-
+   end (~$0.10 spend). Once clean, you test the skill via
+   `/nanogen <prompt>` in Claude Code.
 
 ---
 
 ## 2. Getting a key
 
-1. Open https://aistudio.google.com/app/apikey and sign in with any
-   Google account (personal Gmail recommended — enterprise Workspace
-   accounts can be admin-disabled; see section 6).
-2. Click **"Create API key"**. Pick an existing Google Cloud project
-   or let AI Studio create one for you.
-3. Copy the key. It starts with `AIza...`.
+### Do I need to create a Google Cloud project first?
 
-**Treat it as a secret.** This key authorises paid usage on your
-account. Never commit it to git, paste it into screenshots, or share
-it in chat. If it leaks, revoke it immediately at the same URL and
-generate a new one.
+**No.** AI Studio is designed so you can get an API key without
+pre-provisioning anything in Google Cloud. When you click "Create
+API key", AI Studio offers two choices:
+
+- **"Create API key in new project"** — AI Studio auto-creates a
+  Google Cloud project for you (typically named
+  `Generative Language Client` or similar) and puts the key in it.
+  **Pick this if you don't already have a GCP project and don't
+  want to deal with Cloud Console.** This is the recommended path
+  for new users. You will not see a billing prompt; the free-tier
+  quota is available immediately.
+- **"Create API key in existing project"** — only useful if you
+  already manage GCP projects (for team billing, IAM, or auditing).
+
+For basic Gemini API use — including everything `/nanogen` does —
+the auto-created project is fine. You do **not** need to:
+- Enable any specific GCP API manually (AI Studio handles this)
+- Set up a service account or OAuth client
+- Install `gcloud` or the Google Cloud SDK
+- Configure IAM roles
+
+### Step-by-step
+
+1. **Sign in.** Open https://aistudio.google.com/ and sign in with
+   any Google account. Personal Gmail is the easiest path. Avoid
+   enterprise Google Workspace accounts if possible — IT admins
+   often disable the Gemini API at the organization level, which
+   surfaces later as `E_ADMIN_DISABLED`. If you must use a Workspace
+   account, ask your admin to enable "Generative Language API" for
+   your user (see section 6).
+
+2. **Accept terms.** First-time visitors get a one-screen terms-of-
+   service acceptance. Agree to continue.
+
+3. **Go to the API-key page:**
+   https://aistudio.google.com/app/apikey
+   (bookmark this — same URL for revoking or rotating keys later.)
+
+4. **Click "Create API key"** (the prominent button near the top).
+
+5. **Choose "Create API key in new project"** for first-time users.
+   The page creates the project in the background and returns the
+   key within a second or two.
+
+6. **Copy the key immediately.** It starts with `AIza...` and is
+   ~40 characters long. The dialog shows the plaintext once;
+   afterwards the page only shows a masked preview like
+   `AIza...XyZ`. If you lose the plaintext, generate a new key — you
+   can't recover the old one.
+
+7. **(Optional) Rename the key** on the AI Studio page for
+   bookkeeping (e.g. `nanogen-dev`). Useful once you have several.
+
+### Free tier vs paid tier
+
+- **Free tier** is on by default for personal Google accounts in
+  supported countries. Quota is limited (a few requests per minute
+  on the image-preview models). Enough for the verification
+  checklist below and casual use.
+- **Paid tier** (higher RPM/TPM, production use) requires enabling
+  billing on the project. Go to
+  https://aistudio.google.com/rate-limit → **Upgrade plan** → link
+  an existing Cloud billing account or create one. The upgrade
+  happens at the project level — this is why project choice
+  matters: billing lives on the project, not on the key itself.
+- Check your current tier and limits anytime at
+  https://aistudio.google.com/rate-limit.
+
+If you hit `E_RATE_LIMIT` during normal use, the fix is usually
+upgrading to paid tier for that project, not generating a new key.
+
+### Security
+
+**Treat the key as a secret.** It authorises paid usage on your
+account up to whatever quota you've enabled. Never:
+- Commit it to git (even a private repo — assume it's leaked the
+  moment it enters history)
+- Paste it into screenshots, chat, or bug reports
+- Share it across machines via email/Slack — use your password
+  manager or a `.env` file kept out of version control
+
+If it leaks, revoke it immediately at
+https://aistudio.google.com/app/apikey (there's a delete icon next
+to each key) and generate a new one. Google does not bill you for
+anything after revocation.
 
 ---
 
 ## 3. Setting the env var
 
-Pick whichever fits your workflow. The `/nanogen` CLI looks up
-`GEMINI_API_KEY` first, then falls back to `GOOGLE_API_KEY` (with a
-stderr warning recommending you switch).
+The CLI looks up `GEMINI_API_KEY` first, falls back to
+`GOOGLE_API_KEY` (with a stderr warning). Three ways to set it —
+pick one.
 
-### Interactive shell (current session only)
+### ⭐ Recommended: project-scoped `.env` (matches imagegen)
+
+Create a file named `.env` at `/workspaces/nanogen/.env`:
 
 ```bash
-export GEMINI_API_KEY="AIza..."
+echo 'GEMINI_API_KEY=AIza...YOUR-KEY-HERE...' > /workspaces/nanogen/.env
+grep -q '^\.env$' /workspaces/nanogen/.gitignore || echo '.env' >> /workspaces/nanogen/.gitignore
 ```
 
-Lasts until you close the terminal.
+The CLI walks up the directory tree from cwd looking for `.env`, so
+this works whether you invoke from the repo root, a subdirectory,
+or a worktree. Same pattern as `github.com/zeveck/imagegen`.
 
-### Persistent (every new shell)
+**Why this is the default:**
+- Survives shell restarts without editing `~/.bashrc`
+- Doesn't enter your shell history
+- Gitignored by default (safer against accidental commits)
+- Scoped to this project — doesn't leak into other repos
+- Works the same whether you invoke via `/nanogen` in Claude Code
+  or run the CLI directly
 
-Append to your shell rc file:
+### Alternative 1: persistent shell env
+
+Append to your shell rc file if you want the key available in ALL
+shells / projects:
 
 ```bash
 # bash
@@ -66,27 +161,17 @@ echo 'export GEMINI_API_KEY="AIza..."' >> ~/.bashrc
 echo 'export GEMINI_API_KEY="AIza..."' >> ~/.zshrc
 ```
 
-Reload with `source ~/.bashrc` (or `source ~/.zshrc`).
+Reload with `source ~/.bashrc` (or `source ~/.zshrc`). Only use
+this if you want the key everywhere on this machine; otherwise the
+`.env` approach is tidier.
 
-### Project-scoped `.env`
-
-Create a file named `.env` in the repo root (or any ancestor
-directory of your cwd) with:
-
-```text
-GEMINI_API_KEY=AIza...
-```
-
-The CLI walks up the directory tree from cwd to find a `.env`, so
-this works whether you run it from `/workspaces/nanogen/`, a
-sub-directory, or a worktree.
-
-**DO NOT commit `.env` to git.** Confirm your `.gitignore` contains
-the line `.env` (a one-line check):
+### Alternative 2: one-off export (current shell only)
 
 ```bash
-grep -q '^\.env$' .gitignore || echo '.env' >> .gitignore
+export GEMINI_API_KEY="AIza..."
 ```
+
+Lasts until you close the terminal. Fine for a single ad-hoc test.
 
 ### Note on `GOOGLE_API_KEY`
 
@@ -101,74 +186,26 @@ To silence the warning, set `GEMINI_API_KEY` instead.
 
 ---
 
-## 4. Testing the key (in order)
+## 4. Verification flow
 
-Run these in order. Each step costs more than the previous; stop at
-the first failure and consult section 10.
+Simple. After you put the key in `.env` (section 3), tell me
+you're ready and I'll verify the implementation:
 
-### 4a. Dry-run (free, no key needed) — smoke test
+- Dry-run (free) — smoke test
+- Offline test suite in a clean env — 168 tests must pass
+- One real generate (~$0.034) — proves the full HTTP / auth /
+  response-parse / file-write / history chain
+- One real edit via `--region` (~$0.034) — proves edit mode
+- One multi-turn continuation (~$0.034) — proves
+  `thoughtSignature` round-trip (the load-bearing Gemini-3
+  property)
 
-```bash
-node .claude/skills/nanogen/generate.cjs \
-  --prompt "test" --output /tmp/t.png --dry-run
-```
+Total spend: ~$0.10. If anything fails I'll stop and we'll look at
+it together (see section 10).
 
-**Expected:** stdout begins with `{"dryRun":true,...`, exit code 0.
-This proves the CLI installed correctly and your Node version is
-recent enough.
-
-### 4b. Real generate (~$0.034) — cheapest tier
-
-```bash
-node .claude/skills/nanogen/generate.cjs \
-  --prompt "a single red apple on a white background" \
-  --output /tmp/apple.png \
-  --model gemini-3.1-flash-image-preview --size 1K
-```
-
-**Expected:** PNG file at `/tmp/apple.png`, exit code 0, stdout JSON
-with `"success":true`.
-
-If exit 1: check the `code` field in stdout JSON.
-- `E_MISSING_API_KEY` — env var not set; redo section 3.
-- `E_REGION` — your account's region cannot use the Gemini API; see
-  section 6.
-- `E_ADMIN_DISABLED` — your Workspace admin disabled image gen; see
-  section 6.
-
-### 4c. Real edit (~$0.034) — proves edit mode
-
-Uses the file you just generated as input.
-
-```bash
-node .claude/skills/nanogen/generate.cjs \
-  --image /tmp/apple.png \
-  --region "change the apple to green" \
-  --output /tmp/apple-green.png
-```
-
-**Expected:** PNG file at `/tmp/apple-green.png`. Open both images;
-the apple's colour should be the only material difference.
-
-### 4d. Multi-turn continuation (~$0.034) — proves thoughtSignature round-trip
-
-Continuation re-uses the previous turn's `thoughtSignature` so the
-model can refine without losing context. Pull the most recent
-history id and continue from it:
-
-```bash
-ID=$(tail -1 .nanogen-history.jsonl | node -e \
-  'process.stdin.on("data",d=>console.log(JSON.parse(d).id))')
-node .claude/skills/nanogen/generate.cjs \
-  --history-continue "$ID" \
-  --prompt "add a stem and leaf" \
-  --output /tmp/apple-green-leaf.png
-```
-
-**Expected:** PNG with the green apple plus a stem and leaf. If you
-see `E_CONTINUE_NO_SIGNATURE`, your prior turn used a non-Gemini-3
-model — re-run 4b with `--model gemini-3.1-flash-image-preview` (the
-default already meets this).
+Once I report the impl is clean, you test the skill surface in
+Claude Code — `/nanogen <prompt>`, try an edit, try an iteration
+like "make it bluer". That's the real UX test.
 
 ---
 
@@ -273,44 +310,28 @@ see `.claude/skills/nanogen/reference.md`.
 
 ---
 
-## 9. End-to-end verification checklist
+## 9. Sign-off
 
-Copy this entire block into a fresh shell and paste. Total spend
-~$0.07 (two real generations).
+Once the key is in `.env` and I've reported clean on the
+verification steps from section 4, try the skill yourself:
 
-```bash
-# 1. Env check
-[ -n "$GEMINI_API_KEY" ] || echo "GEMINI_API_KEY not set"
-
-# 2. Dry-run (offline, free)
-node .claude/skills/nanogen/generate.cjs \
-  --prompt test --output /tmp/x.png --dry-run
-
-# 3. Full test suite (offline) — run in a CLEAN env so the
-#    env-resolution tests aren't polluted by any GEMINI_API_KEY
-#    you may have exported elsewhere.
-env -u GEMINI_API_KEY -u GOOGLE_API_KEY -u NANOGEN_API_BASE \
-    -u NANOGEN_RETRY_BASE_MS -u NANOGEN_FETCH_TIMEOUT_MS \
-    -u NANOGEN_MAX_RETRIES \
-  bash -c '( cd .claude/skills/nanogen && npm test )'
-
-# 4. One real generate (~$0.034)
-node .claude/skills/nanogen/generate.cjs \
-  --prompt "red apple" --output /tmp/apple.png \
-  --model gemini-3.1-flash-image-preview --size 1K
-
-# 5. One real edit (~$0.034)
-node .claude/skills/nanogen/generate.cjs \
-  --image /tmp/apple.png --region "make it green" \
-  --output /tmp/green.png
+```text
+/nanogen <whatever you want>
 ```
 
-**Expected outcome:** 5 green checkmarks (no error output, exit
-code 0 from each step). Total spend ≤ $0.07.
+A few follow-ups (`/nanogen edit ...`, `/nanogen make it bluer`)
+exercise edit mode and iteration. When you're satisfied, say so
+and I'll:
 
-After all 5 pass, report back to the orchestrator so the pipeline
-can proceed to landing. Until then, the install commit sits with a
-`.landed` marker reading `status: not-landed`.
+1. Flip `plans/SUB_3_SKILL_INSTALL.md` frontmatter to
+   `status: complete`
+2. Flip `plans/META_IMPLEMENT_A_NANOGEN_SKILL_SIMI.md` Phase 3 to
+   ✅ Done and frontmatter to `status: complete`
+3. Rewrite `.landed` from `status: not-landed` to `status: landed`
+
+Until you sign off, the install commit sits with
+`.landed: status: not-landed` — the pipeline's explicit guard
+against auto-completion.
 
 ---
 
