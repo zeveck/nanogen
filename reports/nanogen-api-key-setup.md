@@ -19,7 +19,11 @@ status: awaiting-user-verification
    (AI Studio auto-creates a GCP project for you; no Cloud Console
    setup needed. See section 2.)
 
-   The key is a ~40-character string beginning with `AIza`.
+   The key is a short opaque string. Google does not publish the
+   format; older keys began with `AIza`, keys issued in 2026 have
+   been observed starting with `AQ.A` (the format changed when
+   Google began linking each new key to a service account). Just
+   copy whatever AI Studio gives you.
 
 2. **Put it in `.env`** at the repo root. The variable name
    `GEMINI_API_KEY` is required (that's the literal name the CLI
