@@ -859,6 +859,318 @@ function parseResponse(json) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4 — Env-Var Resolution (hand-rolled .env parser)
+// ---------------------------------------------------------------------------
+//
+// We deliberately do NOT call process.loadEnvFile. Two verified pitfalls:
+//   (1) It throws on missing files. We'd need a try/catch anyway.
+//   (2) It does NOT overwrite already-set env vars. Critical: if
+//       GEMINI_API_KEY="" (common in CI zeroing) the .env's real value
+//       will NOT replace it. Our manual parser handles this by treating
+//       empty pre-set values as absent (step 1 of resolveApiKey).
+//
+// The hand-rolled parser is 10 lines, zero deps, no shell substitution —
+// simpler than fighting loadEnvFile's quirks.
+
+function parseDotenvSync(p) {
+  // Treat empty values as absent: callers assume `parsed.KEY` is truthy
+  // only when there's actually a value. This matches the spec's
+  // E_MISSING_API_KEY path when .env has `GEMINI_API_KEY=""`.
+  const out = {};
+  let txt;
+  try {
+    txt = fs.readFileSync(p, "utf8");
+  } catch (_) {
+    // Unreadable (perm 000, race-deletion) → act like empty.
+    return out;
+  }
+  for (const raw of txt.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const k = line.slice(0, eq).trim();
+    let v = line.slice(eq + 1).trim();
+    if (
+      (v.startsWith('"') && v.endsWith('"') && v.length >= 2) ||
+      (v.startsWith("'") && v.endsWith("'") && v.length >= 2)
+    ) {
+      v = v.slice(1, -1);
+    }
+    // Empty values are NOT added to the map → treated as absent by callers.
+    if (v.length === 0) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+function findDotenvFile() {
+  const results = [];
+  const seen = new Set();
+  function walk(dir) {
+    while (true) {
+      const p = path.join(dir, ".env");
+      if (!seen.has(p)) {
+        seen.add(p);
+        try {
+          if (fs.statSync(p).isFile()) results.push(p);
+        } catch (_) {
+          // statSync throws if missing or unreadable; swallow and continue.
+        }
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  walk(process.cwd());
+  walk(__dirname);
+  return results;
+}
+
+function resolveApiKey() {
+  // Step 1: check pre-set env; treat "" as unset (loadEnvFile pitfall #2).
+  const presetGemini = process.env.GEMINI_API_KEY;
+  if (typeof presetGemini === "string" && presetGemini.length > 0) {
+    return { key: presetGemini, source: "env:GEMINI_API_KEY" };
+  }
+  const presetGoogle = process.env.GOOGLE_API_KEY;
+  if (typeof presetGoogle === "string" && presetGoogle.length > 0) {
+    process.stderr.write(
+      "nanogen: using GOOGLE_API_KEY. Prefer GEMINI_API_KEY to match Gemini docs.\n"
+    );
+    return { key: presetGoogle, source: "env:GOOGLE_API_KEY" };
+  }
+  // Step 2: walk .env — cwd upward FIRST, then __dirname upward.
+  const found = findDotenvFile();
+  for (const p of found) {
+    const parsed = parseDotenvSync(p);
+    if (parsed.GEMINI_API_KEY) {
+      return { key: parsed.GEMINI_API_KEY, source: `.env:${p}:GEMINI_API_KEY` };
+    }
+    if (parsed.GOOGLE_API_KEY) {
+      process.stderr.write(
+        "nanogen: using GOOGLE_API_KEY. Prefer GEMINI_API_KEY to match Gemini docs.\n"
+      );
+      return { key: parsed.GOOGLE_API_KEY, source: `.env:${p}:GOOGLE_API_KEY` };
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — HTTP Client (retry, error mapping)
+// ---------------------------------------------------------------------------
+//
+// Retry policy:
+//   - Retryable: HTTP 429/500/502/503, network TypeError, AbortError (timeout).
+//   - Non-retryable: any other HTTP status, body-parse failures (body
+//     claimed JSON but wasn't — retrying likely repeats the failure).
+//   - Retry-After header: integer seconds, honored when 1..60 inclusive
+//     AND the response is retryable. Non-numeric or out-of-range → ignore
+//     and fall back to exponential.
+//   - Jitter: delay = base * 2^(attempt-1); jittered = delay + (rand-0.5)*delay.
+//   - Body passed as string to fetch(), so the payload is fully replayable
+//     across retries (no streams).
+//   - Exhausted retries → throw with LAST status + first 500 chars of body.
+
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503]);
+
+function getRetryConfig() {
+  return {
+    MAX_RETRIES: Number(process.env.NANOGEN_MAX_RETRIES) || 3,
+    BASE_DELAY_MS: Number(process.env.NANOGEN_RETRY_BASE_MS) || 1000,
+    FETCH_TIMEOUT_MS: Number(process.env.NANOGEN_FETCH_TIMEOUT_MS) || 120000,
+  };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function computeBackoff(attempt, baseMs) {
+  const delay = baseMs * Math.pow(2, attempt - 1);
+  return delay + (Math.random() - 0.5) * delay;
+}
+
+// Returns a numeric millisecond delay if Retry-After is present, numeric,
+// and within 1..60 seconds (inclusive). Otherwise returns null so the
+// caller falls back to exponential backoff.
+function parseRetryAfter(headerValue) {
+  if (!headerValue) return null;
+  const trimmed = String(headerValue).trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < 1 || n > 60) return null;
+  return n * 1000;
+}
+
+// Thrown when the response body cannot be parsed. Non-retryable by design.
+class BodyParseError extends Error {
+  constructor(message, bodySnippet) {
+    super(message);
+    this.name = "BodyParseError";
+    this.bodySnippet = bodySnippet;
+    this.nonRetryable = true;
+  }
+}
+
+// Thrown when all retries are exhausted.
+class HttpRetryError extends Error {
+  constructor(message, status, body) {
+    super(message);
+    this.name = "HttpRetryError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// Thrown when all retries exhaust on network/abort errors.
+class NetworkRetryError extends Error {
+  constructor(message, lastError) {
+    super(message);
+    this.name = "NetworkRetryError";
+    this.lastError = lastError;
+  }
+}
+
+// fetchWithRetry — issues an HTTP request and retries on transient errors.
+// Returns `{status, headers, bodyText}` on a final non-retryable response
+// (including 2xx, 4xx non-429, etc.). Throws on exhausted retries or
+// body-parse failure.
+async function fetchWithRetry(url, init) {
+  const cfg = getRetryConfig();
+  const totalAttempts = cfg.MAX_RETRIES + 1;
+
+  let lastStatus = null;
+  let lastBody = "";
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+    let res;
+    try {
+      const signal = AbortSignal.timeout(cfg.FETCH_TIMEOUT_MS);
+      res = await fetch(url, Object.assign({}, init, { signal }));
+    } catch (err) {
+      // TypeError from fetch → network. AbortError from timeout → retry.
+      lastError = err;
+      const isTimeout = err && (err.name === "AbortError" ||
+                                err.name === "TimeoutError" ||
+                                (err.code === "ABORT_ERR"));
+      const isNetwork = err && err.name === "TypeError";
+      if (!isTimeout && !isNetwork) {
+        // Non-retryable fetch-phase error (programming bug, etc.).
+        throw err;
+      }
+      if (attempt < totalAttempts) {
+        await sleep(computeBackoff(attempt, cfg.BASE_DELAY_MS));
+        continue;
+      }
+      // Exhausted retries on network/timeout — surface as generic upstream.
+      throw new NetworkRetryError(
+        `fetch failed after ${totalAttempts} attempts: ${err && err.message || err}`,
+        err
+      );
+    }
+
+    // Read body as text. Surface read failures as body-parse errors — not
+    // retried because repeating likely fails the same way.
+    let bodyText;
+    try {
+      bodyText = await res.text();
+    } catch (err) {
+      throw new BodyParseError(
+        `response body read failed: ${err && err.message || err}`,
+        ""
+      );
+    }
+
+    lastStatus = res.status;
+    lastBody = bodyText;
+
+    // If the server declared JSON content-type but the body doesn't parse,
+    // surface as non-retryable E_UNEXPECTED_HTTP per plan.
+    const contentType = (res.headers && res.headers.get
+      ? res.headers.get("content-type")
+      : null) || "";
+    const claimsJson = /\bjson\b/i.test(contentType);
+
+    if (RETRYABLE_STATUSES.has(res.status)) {
+      if (attempt < totalAttempts) {
+        const retryAfterMs = parseRetryAfter(
+          res.headers && res.headers.get ? res.headers.get("retry-after") : null
+        );
+        const delay = retryAfterMs !== null
+          ? retryAfterMs
+          : computeBackoff(attempt, cfg.BASE_DELAY_MS);
+        await sleep(delay);
+        continue;
+      }
+      // Retries exhausted; throw.
+      throw new HttpRetryError(
+        `HTTP ${res.status} after ${totalAttempts} attempts`,
+        res.status,
+        bodyText
+      );
+    }
+
+    // Success or non-retryable error status. If the server claimed JSON
+    // but the body is unparseable AND the status is 2xx, treat as body-parse
+    // failure (the plan note: retrying body-parse failure likely repeats).
+    if (res.status >= 200 && res.status < 300 && claimsJson) {
+      try {
+        JSON.parse(bodyText);
+      } catch (err) {
+        throw new BodyParseError(
+          `response JSON parse failed: ${err && err.message || err}`,
+          bodyText.slice(0, 500)
+        );
+      }
+    }
+
+    return {
+      status: res.status,
+      headers: res.headers,
+      bodyText,
+    };
+  }
+
+  // Unreachable, but keep exhaustive.
+  throw new HttpRetryError(
+    `HTTP retry loop exhausted`,
+    lastStatus,
+    lastBody
+  );
+}
+
+// mapHttpError — map a final (post-retry) HTTP status + body to a stable
+// error code per the plan's 11-row table. Body matching is case-insensitive.
+function mapHttpError(status, body) {
+  const b = String(body || "");
+  const bLower = b.toLowerCase();
+
+  if (status === 400) {
+    const hasInvalidArgument = b.includes("INVALID_ARGUMENT");
+    const matchesPolicy = /prompt|content|policy|safety/i.test(b);
+    if (hasInvalidArgument && matchesPolicy) return "E_CONTENT_POLICY";
+    const mentionsImage = /inline_data|image/i.test(b);
+    const mentionsSize = /size|limit|mime/i.test(b);
+    if (mentionsImage && mentionsSize) return "E_BAD_REQUEST_IMAGE";
+    return "E_BAD_REQUEST";
+  }
+  if (status === 401) return "E_AUTH";
+  if (status === 403) {
+    if (/admin|workspace/i.test(bLower)) return "E_ADMIN_DISABLED";
+    if (/country|region|not supported/i.test(bLower)) return "E_REGION";
+    return "E_FORBIDDEN";
+  }
+  if (status === 404) return "E_MODEL_NOT_FOUND";
+  if (status === 429) return "E_RATE_LIMIT";
+  if (status === 500 || status === 502 || status === 503) return "E_UPSTREAM_5XX";
+  return "E_UNEXPECTED_HTTP";
+}
+
+// ---------------------------------------------------------------------------
 // Output contract
 // ---------------------------------------------------------------------------
 
@@ -933,17 +1245,128 @@ function main() {
     process.exit(0);
   }
 
-  // Phase 1 ends here — real HTTP lives in Phase 4.
-  // No stable error code is assigned for this transitional gap; Phase 4
-  // will wire up real fetch + E_MISSING_API_KEY / E_* mapping. Until then,
-  // exit non-zero with a plain message so callers can detect incompleteness.
+  // Phase 4 — real HTTP path. Phase 5 will add file writing + history;
+  // this intermediate wiring is just enough to exercise fetchWithRetry +
+  // mapHttpError + resolveApiKey end-to-end in the test harness.
+  runHttpFlow(args, stylesIndex).then(
+    (exitCode) => process.exit(exitCode),
+    (err) => {
+      // Unexpected error escaping the flow — emit as E_UNEXPECTED_HTTP.
+      emitError("E_UNEXPECTED_HTTP",
+        "unexpected error: " + (err && err.message || String(err)));
+      process.exit(1);
+    }
+  );
+}
+
+async function runHttpFlow(args, stylesIndex) {
+  // 1. API key resolution.
+  const resolved = resolveApiKey();
+  if (!resolved) {
+    emitError("E_MISSING_API_KEY",
+      "Set GEMINI_API_KEY (or GOOGLE_API_KEY as fallback). " +
+      "See build/nanogen/README.md.");
+    return 1;
+  }
+
+  // 2. Read input images (I/O) + build request (pure).
+  let imageMaterials;
+  try {
+    ({ imageMaterials } = readImageMaterials(args));
+  } catch (e) {
+    emitError("E_IMAGE_NOT_FOUND", String(e && e.message || e));
+    return 1;
+  }
+  const { url, headers, body } =
+    buildGenerateRequestFromMaterials(args, imageMaterials, stylesIndex);
+
+  // 3. Replace the pure builder's placeholder with the real key.
+  const realHeaders = Object.assign({}, headers, {
+    "x-goog-api-key": resolved.key,
+  });
+
+  // 4. Fire with retry.
+  let res;
+  try {
+    res = await fetchWithRetry(url, {
+      method: "POST",
+      headers: realHeaders,
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    if (err instanceof BodyParseError) {
+      const snippet = err.bodySnippet || "";
+      emitError("E_UNEXPECTED_HTTP",
+        "upstream returned unparseable body: " + snippet.slice(0, 500));
+      return 1;
+    }
+    if (err instanceof HttpRetryError) {
+      const code = mapHttpError(err.status, err.body || "");
+      const snippet = String(err.body || "").slice(0, 500);
+      emitError(code,
+        `HTTP ${err.status}${snippet ? ": " + snippet : ""}`);
+      return 1;
+    }
+    if (err instanceof NetworkRetryError) {
+      emitError("E_UPSTREAM_5XX",
+        "upstream unreachable: " +
+        (err.lastError && err.lastError.message || err.message));
+      return 1;
+    }
+    // Unrecognized error — surface as unexpected.
+    emitError("E_UNEXPECTED_HTTP",
+      "unexpected error: " + (err && err.message || String(err)));
+    return 1;
+  }
+
+  // 5. Non-2xx is already handled by fetchWithRetry (it throws HttpRetryError
+  // on retryable exhaustion). For non-retryable non-2xx, we get here with
+  // the response; map it.
+  if (res.status < 200 || res.status >= 300) {
+    const code = mapHttpError(res.status, res.bodyText || "");
+    const snippet = String(res.bodyText || "").slice(0, 500);
+    emitError(code, `HTTP ${res.status}${snippet ? ": " + snippet : ""}`);
+    return 1;
+  }
+
+  // 6. 2xx — parse body JSON. Body-parse failures on 2xx are already
+  // surfaced by fetchWithRetry via BodyParseError, so we can parse here
+  // optimistically. If parse fails, treat as E_UNEXPECTED_HTTP.
+  let json;
+  try {
+    json = JSON.parse(res.bodyText);
+  } catch (e) {
+    emitError("E_UNEXPECTED_HTTP",
+      "response JSON parse failed: " + String(res.bodyText).slice(0, 500));
+    return 1;
+  }
+
+  const parsed = parseResponse(json);
+  if (parsed.refusalReason) {
+    process.stdout.write(JSON.stringify({
+      success: false,
+      code: "E_REFUSED",
+      error: parsed.refusalReason,
+      refusalDetails: {
+        finishReason: parsed.finishReason,
+        promptBlockReason: parsed.promptBlockReason,
+        text: parsed.text,
+      },
+    }) + "\n");
+    return 1;
+  }
+
+  // Phase 4 emits a minimal success JSON; Phase 5 will extend this to
+  // write the output file and append history.
   process.stdout.write(JSON.stringify({
-    success: false,
-    code: "E_NOT_IMPLEMENTED",
-    error: "nanogen Phase 1 only supports --help and --dry-run. " +
-           "See plans/SUB_1_CLI_CORE.md.",
+    success: true,
+    model: args.model || DEFAULT_MODEL,
+    aspectRatio: args.aspect || DEFAULT_ASPECT,
+    imageSize: args.size || DEFAULT_SIZE,
+    refusalReason: parsed.refusalReason,
+    bytes: parsed.image ? parsed.image.length : 0,
   }) + "\n");
-  process.exit(1);
+  return 0;
 }
 
 // Export for in-process testing.
@@ -963,6 +1386,17 @@ module.exports = {
   composePromptText,
   canonicalSafetySettings,
   mimeTypeForExt,
+  // Phase 4:
+  resolveApiKey,
+  findDotenvFile,
+  parseDotenvSync,
+  fetchWithRetry,
+  mapHttpError,
+  parseRetryAfter,
+  computeBackoff,
+  BodyParseError,
+  HttpRetryError,
+  NetworkRetryError,
 };
 
 if (require.main === module) {
