@@ -1,0 +1,32 @@
+{
+  "$schema": "./zskills-config.schema.json",
+  "project_name": "nanogen",
+  "timezone": "America/New_York",
+  "execution": {
+    "landing": "cherry-pick",
+    "main_protected": false,
+    "branch_prefix": "feat/"
+  },
+  "testing": {
+    "unit_cmd": "",
+    "full_cmd": "",
+    "output_file": ".test-results.txt",
+    "file_patterns": []
+  },
+  "dev_server": {
+    "cmd": "",
+    "port_script": "scripts/port.sh",
+    "main_repo_path": "/workspaces/nanogen"
+  },
+  "ui": {
+    "file_patterns": "",
+    "auth_bypass": ""
+  },
+  "ci": {
+    "auto_fix": true,
+    "max_fix_attempts": 2
+  },
+  "agents": {
+    "min_model": "auto"
+  }
+}
