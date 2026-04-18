@@ -75,8 +75,55 @@ preset prompt fragment appended as ` Style: ...` to the base text.
 
 ## 3. Asset-type defaults
 
-Table of sensible defaults when the user hasn't pinned model / size
-/ aspect:
+When the user invokes `/nanogen` without a `--output` path, infer an
+**asset type** from the request, then pick defaults for (a) output
+path, (b) model, (c) aspect, (d) size, (e) style hints.
+
+### Output path convention
+
+Route outputs into `assets/<category>/<slug>.<ext>` under the caller's
+cwd. Mirrors imagegen's layout so repos that use both skills stay
+tidy. The CLI's `fs.mkdirSync(..., {recursive: true})` handles
+missing subdirectories automatically when you pass a nested
+`--output`.
+
+| Asset type | Output path |
+|---|---|
+| Characters / sprites | `assets/sprites/<slug>.<ext>` |
+| Tilesets / terrain | `assets/tiles/<slug>.<ext>` |
+| Items / icons | `assets/items/<slug>.<ext>` |
+| UI elements | `assets/ui/<slug>.<ext>` |
+| Backgrounds / scenes | `assets/backgrounds/<slug>.<ext>` |
+| Portraits | `assets/portraits/<slug>.<ext>` |
+| Concept art | `assets/concept/<slug>.<ext>` |
+| Diagrams / schematics | `assets/diagrams/<slug>.<ext>` |
+| Text-heavy images (logos, posters) | `assets/typography/<slug>.<ext>` |
+| Effects (VFX / shader stills) | `assets/effects/<slug>.<ext>` |
+
+Rules for `<slug>`:
+
+- Derive from the user's description: lowercase, kebab-case, ≤ 40
+  chars. Example: `"a 16-bit warrior with a huge sword"` →
+  `warrior-16bit-huge-sword` or `warrior-16bit`.
+- If the user already supplied a file path in `--output`, honor it
+  verbatim. Do not reroute into `assets/`.
+- If the user asked for a specific directory (`"save it in
+  /tmp"`), honor that.
+
+Rules for `<ext>` — important for Gemini's real output behavior:
+
+- **Prefer `.jpg` for pixel-art, flat-vector, design-technical,
+  animation-cartoon, drawing-ink, photographic, and painterly
+  output.** Gemini predominantly returns JPEG bytes for image
+  requests regardless of the filename we pass. Naming the output
+  `.jpg` up-front means the CLI's ext-vs-returned-MIME warning
+  doesn't fire and the file doesn't need renaming after.
+- Reserve `.png` for cases where the user explicitly asks for PNG
+  (and accept that Gemini may still return JPEG bytes, triggering
+  a stderr warning and a follow-up rename).
+- `.webp` is available if the user asks; rare.
+
+### Model / aspect / size defaults
 
 | Asset type | Default model | Default aspect | Default size | Style category hints |
 |---|---|---|---|---|
@@ -89,6 +136,7 @@ Table of sensible defaults when the user hasn't pinned model / size
 | Concept art | `gemini-3-pro-image-preview` | 16:9 | 2K | `painterly`, `drawing-ink` |
 | Diagrams / schematics | `gemini-3.1-flash-image-preview` | 16:9 | 1K | `design-technical` |
 | Text-heavy images (logos, posters) | `gemini-3-pro-image-preview` | varies | **2K minimum** | `design-technical` |
+| Effects | `gemini-3.1-flash-image-preview` | 1:1 | 1K | `speculative-niche`, `flat-vector` |
 
 Text-in-image rendered below 2K is frequently garbled; if the user
 wants readable text in the image, default to 2K+ and
