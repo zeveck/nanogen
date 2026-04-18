@@ -1,7 +1,8 @@
 ---
 title: /nanogen Skill — Meta-Plan
 created: 2026-04-17
-status: active
+status: complete
+completed: 2026-04-18
 ---
 
 # Meta-Plan: /nanogen Skill — Build, Edit Flow, Install, User Checkpoint
@@ -68,7 +69,7 @@ multi-provider abstraction, UI/GUI, auto-install of an API key.
 |-------|--------|--------|-------|
 | 1 — Implement SUB_1_CLI_CORE | ✅ Done | `6902e0d` | All 5 SUB_1 phases landed; `npm test` exit 0, 126 tests |
 | 2 — Implement SUB_2_EDIT_FLOW | ✅ Done | `b76a4cd` | All 3 SUB_2 phases landed; 164 tests green |
-| 3 — Implement SUB_3_SKILL_INSTALL | ⊘ Awaiting user verification | | Final sub-plan terminates in a user checkpoint — meta-plan must NOT auto-complete. SUB_3 Phase 1 + 2 done; Phase 3 wrote `reports/nanogen-api-key-setup.md` and emitted the checkpoint banner; awaiting user to verify the API key + run the 5-step checklist |
+| 3 — Implement SUB_3_SKILL_INSTALL | ✅ Done | `a69fce6` | User signed off 2026-04-18. Live-verified: 6 real /nanogen invocations across generate, single-image edit, region-based inpainting, object replacement, style transfer, multi-turn continuation. Two critical bugs fixed during verification (NANOGEN_DOTENV_PATH test isolation, thoughtSignature same-part placement). See `reports/nanogen-verification.md`. |
 
 ## Phase 1 — Implement: SUB_1 (Foundation CLI + Style Catalog + Tests)
 

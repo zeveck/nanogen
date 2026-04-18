@@ -1,7 +1,8 @@
 ---
 title: /nanogen — Verification Report
 created: 2026-04-17
-status: claude-verified / awaiting-eyeball
+status: user-signed-off
+signed-off: 2026-04-18
 ---
 
 # /nanogen — Verification Report

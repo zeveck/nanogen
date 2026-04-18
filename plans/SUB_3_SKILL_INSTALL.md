@@ -1,7 +1,8 @@
 ---
 title: /nanogen — Sub-Plan 3: SKILL.md Authoring, Install, API-Key Doc, User Checkpoint
 created: 2026-04-17
-status: active
+status: complete
+completed: 2026-04-18
 ---
 
 # Plan: /nanogen — Sub-Plan 3: SKILL.md Authoring, Install, API-Key Doc, User Checkpoint
@@ -38,7 +39,7 @@ execution so SKILL.md and reference.md reflect the actual CLI.
 |-------|--------|--------|-------|
 | 1 — Author SKILL.md + reference.md in `build/nanogen/` | ✅ Done | `716e0b4` | 4 doc-lint tests; 72 slugs in catalog; forbidden-tokens clean; aggregate 168 |
 | 2 — Install `build/nanogen/` → `.claude/skills/nanogen/` | ✅ Done | `542b24f` | Installed via `cp -r`; `tools/` excluded; npm test from installed location: 168/168; /nanogen appears in skill list |
-| 3 — API-key setup doc + USER CHECKPOINT (plan stops here) | ⊘ | | Awaiting user verification — do NOT mark Done. |
+| 3 — API-key setup doc + USER CHECKPOINT (plan stops here) | ✅ Done | `a69fce6` | User signed off 2026-04-18 after live /nanogen verification (spider, warrior, frog-meaner generations all looked right). |
 
 ## Phase 1 — Author SKILL.md + reference.md (under `build/nanogen/`)
 
