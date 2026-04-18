@@ -259,25 +259,94 @@ multi-image composition, multi-turn continuation, all the flags.
 
 ## Install into another repo
 
-The `.claude/skills/nanogen/` tree is self-contained. To drop it into
-another Claude-Code repo:
+The `.claude/skills/nanogen/` tree is self-contained. Pick whichever
+install route fits — you do NOT need to clone this repo.
+
+### Option 1 — ask your agent
+
+Paste this into Claude Code (or any coding agent) in your target repo:
+
+> Install the nanogen skill from github.com/zeveck/nanogen into
+> `.claude/skills/nanogen/`. Fetch the files via raw.githubusercontent.com;
+> add a Bash permission for `node .../nanogen/generate.cjs:*` to
+> `.claude/settings.local.json`; set `.claude/zskills-config.json`
+> `testing.unit_cmd` to `"cd .claude/skills/nanogen && npm test"`.
+
+The agent can handle it from there.
+
+### Option 2 — `curl` the files you need (no clone)
+
+Fetches ~0.8 MB of actual skill content. No gallery, no plans, no
+reports. Target directory is empty when you start.
 
 ```bash
-# From your target repo:
-cp -r /path/to/nanogen/build/nanogen .claude/skills/nanogen
-rm -rf .claude/skills/nanogen/tools    # authoring-only dir
+cd your-repo-root
+mkdir -p .claude/skills/nanogen/tests/fixtures
 
-# Add the Bash-invocation permission so Claude doesn't prompt every time:
-# Edit .claude/settings.local.json, add to permissions.allow:
-#   "Bash(node /path/to/your/repo/.claude/skills/nanogen/generate.cjs:*)"
+BASE=https://raw.githubusercontent.com/zeveck/nanogen/main/.claude/skills/nanogen
 
-# Wire up test command (optional):
-# Edit .claude/zskills-config.json, set:
-#   "testing": { "unit_cmd": "cd .claude/skills/nanogen && npm test", ... }
+# Core files
+for f in generate.cjs magicBytes.cjs styles.json SKILL.md reference.md README.md package.json; do
+  curl -sSL "$BASE/$f" -o ".claude/skills/nanogen/$f"
+done
+chmod +x .claude/skills/nanogen/generate.cjs
+
+# Tests + fixtures (optional but let you verify the install)
+for f in test_parse_args test_styles test_request_builder test_response_parser \
+         test_http_retry test_env test_history test_integration \
+         test_edit_multi_image test_multi_turn test_docs_lint; do
+  curl -sSL "$BASE/tests/$f.cjs" -o ".claude/skills/nanogen/tests/$f.cjs"
+done
+# (fixtures: download the per-test JSON + PNG fixtures the same way,
+#  from $BASE/tests/fixtures/, if you want the full test suite to pass)
 ```
 
-Then get an API key and `echo 'GEMINI_API_KEY=...' > .env` at the
-target repo's root.
+Then add to `.claude/settings.local.json` `permissions.allow`:
+```
+"Bash(node /abs/path/to/your/repo/.claude/skills/nanogen/generate.cjs:*)"
+```
+
+Smoke test:
+```bash
+node .claude/skills/nanogen/generate.cjs --help
+```
+
+### Option 3 — sparse-checkout clone (git-tracked, lean)
+
+Clones only the skill directory; follows updates via `git pull`.
+Same ~0.8 MB on disk, but the checkout is a real git repo so you
+can track upstream changes.
+
+```bash
+git clone --filter=blob:none --sparse https://github.com/zeveck/nanogen
+cd nanogen
+git sparse-checkout set .claude/skills/nanogen
+# Move the skill dir where you want it, or reference it in place.
+```
+
+### Option 4 — full clone (everything)
+
+If you want the plans, reports, gallery, and build source too
+(~50 MB on disk, mostly due to the 18 MB image gallery):
+
+```bash
+git clone https://github.com/zeveck/nanogen
+```
+
+---
+
+### Regardless of install route — final two steps
+
+1. **Get a Gemini API key**, set it in `.env` at your repo root:
+   ```bash
+   echo 'GEMINI_API_KEY=<paste-your-key>' > .env
+   ```
+   Full walkthrough: [`reports/nanogen-api-key-setup.md`](reports/nanogen-api-key-setup.md).
+2. **Wire up the test command** (optional). Edit
+   `.claude/zskills-config.json`:
+   ```json
+   "testing": { "unit_cmd": "cd .claude/skills/nanogen && npm test", ... }
+   ```
 
 ---
 
