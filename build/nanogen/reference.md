@@ -263,18 +263,64 @@ setup], [background treatment].
 [compositional notes], [lighting].
 ```
 
-### Transparency note
+### Transparency workflow (the chromakey pattern)
 
-Nano Banana has **no alpha channel**. If the user asks for a
-transparent-background sprite or icon, either:
+**Nano Banana does not produce alpha output natively.** Google's
+docs (https://ai.google.dev/gemini-api/docs/image-generation)
+explicitly state: *"The model does not support generating a
+transparent background."* Every generation returns a solid-
+background RGB image.
 
-1. Generate on a pure solid color (e.g. flat magenta or neutral
-   grey) and key out the background in post; or
-2. Generate on the intended final background (white card, game HUD
-   panel, etc.) and accept the composite.
+That's not a dealbreaker for sprite work — the community-standard
+workflow is generate-then-strip:
 
-Do not try to coax transparency out of the model — it cannot
-produce it.
+1. **Generate on a chromakey background.** Prompt for a
+   pure solid color the subject doesn't contain, e.g.
+   `"on a pure chromakey green (#00FF00) background, no
+   scenery, no shadows, no ground plane"`. Green is preferred
+   because fewer subjects contain pure `#00FF00`; magenta
+   (`#FF00FF`) is the common alternative. Avoid white if the
+   subject has any white details (armor highlights, teeth,
+   paper, text) — they'll get erased.
+
+2. **Strip the key color with any off-the-shelf tool.** nanogen
+   does not ship image-processing dependencies; use ImageMagick
+   (ubiquitous, pre-installed on most dev containers):
+
+   ```bash
+   # Strip chromakey green to transparent alpha
+   convert sprite.jpg -fuzz 10% -transparent '#00FF00' sprite.png
+
+   # Or strip a white background (only safe for subjects without white)
+   convert sprite.jpg -fuzz 5% -transparent white sprite.png
+   ```
+
+   The `-fuzz` tolerance handles JPEG compression's edge smearing.
+   Tune 5-15% depending on how clean the key is.
+
+3. **Verify the result.** Open the resulting PNG in an editor
+   with a checkerboard background; the subject should have clean
+   edges and the key color should be fully gone. If you see
+   green fringing around the subject, raise `-fuzz` slightly;
+   if subject detail is being erased, lower it.
+
+Alternative workflows for specific scenarios:
+
+- **Dual-generation alpha recovery** — generate the same subject
+  on white, then again on black, diff the two to recover a mask.
+  Relies on cross-generation consistency; less reliable than
+  chromakey.
+- **Gemini 3 Code Execution** — ask Gemini 3 Flash (separate
+  invocation, NOT nanogen) to "remove the background" and it
+  will write + run its own Python (PIL/OpenCV) to strip the
+  key color. Fully automatic but adds a second API call.
+
+The `/nanogen` skill's pixel-art / sprite / icon asset-type
+defaults suggest `.jpg` output — which is fine for the chromakey
+workflow since ImageMagick re-encodes losslessly into PNG on
+strip. For hard-edged pixel art where JPEG compression would
+damage edges, consider `--size 2K` to give ImageMagick more
+pixels to work with before the key removal.
 
 ## Aspect ratio guidance
 

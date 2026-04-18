@@ -36,7 +36,8 @@ for the full pricing table.
 18. [Custom history IDs — `--history-id`](#18-custom-history-ids----history-id)
 19. [Preview requests without spending — `--dry-run`](#19-preview-requests-without-spending----dry-run)
 20. [Getting help — `--help`](#20-getting-help----help)
-21. [Via Claude Code — `/nanogen`](#21-via-claude-code--nanogen)
+21. [Transparent sprites (chromakey workflow)](#21-transparent-sprites-chromakey-workflow)
+22. [Via Claude Code — `/nanogen`](#22-via-claude-code--nanogen)
 
 ---
 
@@ -568,7 +569,89 @@ nanogen --help
 
 ---
 
-## 21. Via Claude Code — `/nanogen`
+## 21. Transparent sprites (chromakey workflow)
+
+**Nano Banana does not produce alpha output.** Google's docs:
+*"The model does not support generating a transparent background."*
+Every generation returns a solid-background RGB image.
+
+For transparent sprites — sprite sheets, game assets, iconography —
+the community-standard pattern is **generate on a chromakey
+background, strip programmatically**:
+
+### Step 1: generate on a chromakey green background
+
+```bash
+nanogen \
+  --prompt "a 16-bit pixel art warrior with a huge sword, full body heroic pose, on a pure chromakey green (#00FF00) background, no shadows, no ground plane, no scenery" \
+  --style pixel-16bit \
+  --aspect 2:3 --size 2K \
+  --output assets/sprites/warrior.jpg
+```
+
+Notes:
+- **Bump to `--size 2K`** for sprites — ImageMagick has more pixels
+  to work with before the key removal, so edge quality survives
+  JPEG compression better.
+- **Green (`#00FF00`) is preferred** because few subjects contain
+  pure green. Magenta (`#FF00FF`) is the standard alternative.
+  Avoid white if your subject has any white details (armor,
+  teeth, paper, text) — they'll get erased with the background.
+- Output file is `.jpg` because Gemini returns JPEG bytes regardless
+  of extension; naming it `.jpg` avoids the extension-mismatch
+  warning. ImageMagick re-encodes to PNG in step 2.
+
+### Step 2: strip the key color to alpha
+
+Any off-the-shelf tool works. ImageMagick is the most common:
+
+```bash
+# Strip chromakey green to transparent alpha
+convert assets/sprites/warrior.jpg -fuzz 10% -transparent '#00FF00' \
+  assets/sprites/warrior.png
+
+# Alternative: strip a white background (only if subject has no white)
+convert assets/sprites/warrior.jpg -fuzz 5% -transparent white \
+  assets/sprites/warrior.png
+```
+
+The `-fuzz N%` tolerance handles JPEG compression's slight colour
+drift at edges. Tune 5–15% depending on how clean the key was:
+
+- Too little (`-fuzz 1%`) → green halo around the subject.
+- Too much (`-fuzz 30%`) → subject colour detail gets eaten.
+- 10% is a good default for chromakey green.
+
+### Step 3: verify
+
+Open `warrior.png` in an editor with a checkerboard background
+visible. The subject should have clean edges; the background
+should be fully transparent. If you see green fringing, raise
+`-fuzz`; if subject detail disappears, lower it.
+
+### When dual-generation alpha recovery helps
+
+An alternative technique for tricky subjects (e.g. ones that DO
+contain green): generate the same prompt twice, once on white
+and once on black, diff the two images to recover a mask. More
+effort, relies on cross-generation consistency — use only if
+chromakey fails.
+
+### What nanogen deliberately does NOT do
+
+- **No built-in transparency flag.** `--transparent-via <color>`
+  was considered and rejected to preserve the zero-dep promise
+  (would require `sharp` or a vendored PNG encoder).
+- **No auto-strip of the chromakey background.** ImageMagick is
+  ubiquitous, pre-installed on most dev containers, and produces
+  better results with user-tunable `-fuzz` than hardcoded
+  heuristics could.
+- **No alpha-channel output.** Gemini's API has no parameter for
+  it. If the model's upstream contract changes, we'll add it.
+
+---
+
+## 22. Via Claude Code — `/nanogen`
 
 The raw CLI gives you total control; the `/nanogen` skill gives you
 the agent layer that picks styles, infers asset-type defaults, and
