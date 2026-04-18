@@ -80,7 +80,7 @@ const REPEATABLE_FLAGS = new Set([
   "--image", "--negative", "--safety", "--style", "--region",
 ]);
 const BOOLEAN_FLAGS = new Set([
-  "--dry-run", "--no-history", "--help", "-h", "--check-key",
+  "--dry-run", "--no-history", "--help", "-h",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -291,10 +291,6 @@ function parseArgs(argv) {
     }
     if (tok === "--dry-run") {
       args.dryRun = true;
-      continue;
-    }
-    if (tok === "--check-key") {
-      args.checkKey = true;
       continue;
     }
     if (tok === "--no-history") {
@@ -621,12 +617,13 @@ function printHelp() {
     "                           thoughtSignature). Mutually exclusive",
     "                           with --history-parent.",
     "  --no-history             Skip history append.",
-    "  --dry-run                Print would-be request as JSON, exit 0.",
-    "  --check-key              Report whether an API key is reachable",
-    "                           (via shell env or .env walker). Exit 0",
-    "                           if found, 1 with E_MISSING_API_KEY if not.",
-    "                           Never makes an HTTP call; never reveals",
-    "                           the full key (prints only first 4 chars).",
+    "  --dry-run                Preview the request as JSON and exit 0.",
+    "                           No HTTP call. No API key needed to run it,",
+    "                           but dry-run ALSO reports whether a key is",
+    "                           reachable — via the keyResolved/keySource/",
+    "                           keyPrefix fields in its output — so it",
+    "                           doubles as a free preflight for the skill",
+    "                           layer. Full key is never printed.",
     "  --help, -h               Show this help.",
     "",
     "Examples:",
@@ -1638,12 +1635,32 @@ function emitDryRun(url, headers, body) {
   const redactedHeaders = Object.assign({}, headers, {
     "x-goog-api-key": "<redacted>",
   });
-  process.stdout.write(JSON.stringify({
+  // Preflight key probe: run resolveApiKey() for information only.
+  // Dry-run still exits 0 regardless of key presence — the invocation
+  // is by contract a safe preview with no HTTP. But callers (SKILL.md,
+  // CI smoke tests) want to know whether a subsequent REAL invocation
+  // would have a key to send. Report source + first-4-char prefix +
+  // length; never print the full key.
+  const resolved = resolveApiKey();
+  const keyInfo = resolved && resolved.key
+    ? {
+        keyResolved: true,
+        keySource: resolved.source,
+        keyPrefix: resolved.key.slice(0, 4),
+        keyLength: resolved.key.length,
+      }
+    : {
+        keyResolved: false,
+        keySource: null,
+        keyPrefix: null,
+        keyLength: 0,
+      };
+  process.stdout.write(JSON.stringify(Object.assign({
     dryRun: true,
     url,
     headers: redactedHeaders,
     body,
-  }) + "\n");
+  }, keyInfo)) + "\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -1675,33 +1692,6 @@ function main() {
   if (args.help) {
     printHelp();
     process.exit(0);
-  }
-
-  // --check-key: run the actual resolveApiKey() (same logic the real
-  // CLI path uses — checks shell env AND walks .env from cwd + __dirname)
-  // and emit one JSON line reporting source + key prefix. Never hits
-  // HTTP, never reveals the full key. Used by SKILL.md and CI smoke
-  // tests to verify a key is reachable before spending quota. Exits 0
-  // on success, 1 with E_MISSING_API_KEY otherwise.
-  if (args.checkKey) {
-    const resolved = resolveApiKey();
-    if (resolved && resolved.key) {
-      const prefix = resolved.key.slice(0, 4);
-      process.stdout.write(
-        JSON.stringify({
-          success: true,
-          source: resolved.source,
-          keyPrefix: prefix,
-          keyLength: resolved.key.length,
-        }) + "\n"
-      );
-      process.exit(0);
-    }
-    emitError(
-      "E_MISSING_API_KEY",
-      "no GEMINI_API_KEY or GOOGLE_API_KEY in environment or .env; see reports/nanogen-api-key-setup.md"
-    );
-    process.exit(1);
   }
 
   const v = validateArgs(args, stylesIndex);

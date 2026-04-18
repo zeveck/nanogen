@@ -21,21 +21,31 @@ always safe and requires no API key.**
 Before any real invocation, verify:
 
 ```bash
-node .claude/skills/nanogen/generate.cjs --check-key
+node .claude/skills/nanogen/generate.cjs \
+  --prompt preflight --output /tmp/nanogen-preflight.png --dry-run
 ```
 
-`--check-key` runs the CLI's actual key resolver — it checks
-`GEMINI_API_KEY` and `GOOGLE_API_KEY` in shell env AND walks
-`.env` files from the cwd and the skill directory. Never hits
-HTTP; never reveals the full key. Exit codes:
+`--dry-run` was already the zero-cost "would this request look
+right?" primitive. It now ALSO reports whether a real invocation
+would find a key — via `keyResolved`/`keySource`/`keyPrefix`/
+`keyLength` fields in its stdout JSON. The full key is never
+printed; dry-run never hits HTTP regardless of key presence.
 
-- **Exit 0** — key reachable. stdout: `{"success":true,"source":"<where>","keyPrefix":"<first 4>","keyLength":N}`. Proceed.
-- **Exit 1** — no key anywhere. stdout: `{"success":false,"code":"E_MISSING_API_KEY",...}`. STOP. Point the user to `reports/nanogen-api-key-setup.md`, which covers getting a key and putting it in `.env` at the repo root.
+Exit code is always 0 on valid args (dry-run's contract is "safe
+preview"). The skill layer inspects the JSON:
 
-Do NOT use `printenv GEMINI_API_KEY` as the preflight check —
-that ONLY reads shell-exported env vars and misses the documented
-setup workflow (key in `.env`, not exported). `--check-key` is
-the correct probe.
+- **`keyResolved: true`** → proceed. `keySource` tells you
+  where the key came from (`env:GEMINI_API_KEY`, `env:GOOGLE_API_KEY`,
+  or a `.env` path).
+- **`keyResolved: false`** → STOP. Point the user to
+  `reports/nanogen-api-key-setup.md`, which covers getting a key
+  and putting it in `.env` at the repo root.
+
+Do NOT use `printenv GEMINI_API_KEY` as the preflight — it ONLY
+reads shell-exported env vars and misses the documented setup
+workflow (key in `.env`, not exported). The CLI's own resolver
+walks `.env` files, so the dry-run probe is the authoritative
+check.
 
 If the user gets stuck on `E_MISSING_API_KEY`, do not retry
 blindly — the CLI fails fast and gives no interactive prompt.
