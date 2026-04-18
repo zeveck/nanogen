@@ -259,22 +259,19 @@ multi-image composition, multi-turn continuation, all the flags.
 
 ## Install into another repo
 
-The `.claude/skills/nanogen/` tree is self-contained. Pick whichever
-install route fits — you do NOT need to clone this repo.
-
-### Option 1 — ask your agent
-
-Paste this into Claude Code (or any coding agent) in your target repo:
+**Recommended: just ask your agent.** Paste this prompt into Claude
+Code (or any other coding agent) in your target repo:
 
 > Install the nanogen skill from github.com/zeveck/nanogen into
-> `.claude/skills/nanogen/`. Fetch the files via raw.githubusercontent.com;
-> add a Bash permission for `node .../nanogen/generate.cjs:*` to
-> `.claude/settings.local.json`; set `.claude/zskills-config.json`
-> `testing.unit_cmd` to `"cd .claude/skills/nanogen && npm test"`.
+> `.claude/skills/nanogen/`. Fetch the files via raw.githubusercontent.com
+> — don't clone the whole repo. Then tell me to get a Gemini API key.
 
-The agent can handle it from there.
+The agent handles the rest (permission entries, config wiring,
+directory structure, whatever's needed in your setup). The rest of
+this section is reference material — for the agent executing that
+prompt, or for humans who prefer to do it by hand.
 
-### Option 2 — `curl` the files you need (no clone)
+### Manual — `curl` the files you need (no clone)
 
 Fetches ~0.8 MB of actual skill content. No gallery, no plans, no
 reports. Target directory is empty when you start.
@@ -311,7 +308,7 @@ Smoke test:
 node .claude/skills/nanogen/generate.cjs --help
 ```
 
-### Option 3 — sparse-checkout clone (git-tracked, lean)
+### Manual — sparse-checkout clone (git-tracked, lean)
 
 Clones only the skill directory; follows updates via `git pull`.
 Same ~0.8 MB on disk, but the checkout is a real git repo so you
@@ -324,7 +321,7 @@ git sparse-checkout set .claude/skills/nanogen
 # Move the skill dir where you want it, or reference it in place.
 ```
 
-### Option 4 — full clone (everything)
+### Manual — full clone (everything, ~50 MB)
 
 If you want the plans, reports, gallery, and build source too
 (~50 MB on disk, mostly due to the 18 MB image gallery):
