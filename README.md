@@ -3,7 +3,9 @@
 > A Claude Code skill (and standalone CLI) for image generation and
 > editing via Google's Nano Banana / Gemini image models.
 
-> `/nanogen a misty Scottish highland cliff at sunrise overlooking the sea, dramatic cinematic concept art, 16:9`
+```
+/nanogen a misty Scottish highland cliff at sunrise overlooking the sea, dramatic cinematic concept art, 16:9
+```
 
 <img src="docs/images/highland-cliff.jpg" alt="misty Scottish highland cliff at sunrise" width="100%">
 
@@ -15,6 +17,34 @@ install — just Node 20.12+ and `fetch`.
 
 ---
 
+## Getting started
+
+1. **Install the skill.** Paste this into Claude Code (or any coding
+   agent) in your target repo:
+
+   ```
+   Install the nanogen skill from github.com/zeveck/nanogen.
+   ```
+
+2. **Add a Gemini API key** to `.env` at your repo root (get one at
+   <https://aistudio.google.com/app/apikey>):
+
+   ```
+   GEMINI_API_KEY=<paste-your-key>
+   ```
+
+3. **Talk to Claude Code:**
+
+   ```
+   /nanogen a cozy cabin in a snowy pine forest at dusk
+   ```
+
+That's it. The skill picks style, aspect, size, and output path from
+your request. Pass `--style`, `--aspect`, `--size`, or `--output`
+when you want to override.
+
+---
+
 ## Gallery
 
 Every image below is paired with the `/nanogen` prompt that produced
@@ -22,13 +52,33 @@ it. Type the prompt into Claude Code; the skill handles the rest.
 
 ### Text-to-image
 
-> `/nanogen a single red apple on a white marble table`
+```
+/nanogen a single red apple on a white marble table
+```
 
 <img src="docs/images/apple.jpg" alt="red apple on a white marble table" width="45%">
 
-> `/nanogen a 16-bit warrior with a huge sword on a white background`
+```
+/nanogen a 16-bit warrior with a huge sword on a white background
+```
 
 <img src="docs/images/warrior-16bit.jpg" alt="16-bit pixel art warrior with huge sword" width="33%">
+
+```
+/nanogen a medieval knight in silver plate armor in a grassy clearing, holding a straight sword, bright daylight, photorealistic, full body centered pose
+```
+
+<img src="docs/images/knight.jpg" alt="photorealistic medieval knight in silver plate armor" width="33%">
+
+Short, casual prompts work too — the skill expands them. Below,
+"16-bit" routed to `--style pixel-16bit` and "large" upgraded the
+output to 2K automatically:
+
+```
+/nanogen A picture of a cute spider with fuzzy legs and eight eyes. 16-bit. large.
+```
+
+<img src="docs/images/cute-spider.jpg" alt="16-bit pixel art cute spider with fuzzy legs and eight eyes" width="45%">
 
 ### Same prompt, three styles
 
@@ -36,11 +86,15 @@ Add `--style <slug>` to steer the aesthetic. The catalog has 72
 presets across 10 categories; here's the same lighthouse in three of
 them:
 
-> `/nanogen --style watercolor a solitary stone lighthouse on a rocky point, crashing waves at its base, an overcast sky, a single gull overhead`
->
-> `/nanogen --style cyanotype a solitary stone lighthouse on a rocky point, crashing waves at its base, an overcast sky, a single gull overhead`
->
-> `/nanogen --style art-deco a solitary stone lighthouse on a rocky point, crashing waves at its base, an overcast sky, a single gull overhead`
+```
+/nanogen --style watercolor a solitary stone lighthouse on a rocky point, crashing waves at its base, an overcast sky, a single gull overhead
+```
+```
+/nanogen --style cyanotype a solitary stone lighthouse on a rocky point, crashing waves at its base, an overcast sky, a single gull overhead
+```
+```
+/nanogen --style art-deco a solitary stone lighthouse on a rocky point, crashing waves at its base, an overcast sky, a single gull overhead
+```
 
 | watercolor | cyanotype | art-deco |
 |:---:|:---:|:---:|
@@ -52,7 +106,9 @@ Quote the literal string you want rendered. Text-in-image is
 hit-or-miss at small sizes; the skill routes text-heavy prompts to
 Pro at 2K automatically.
 
-> `/nanogen a vintage French coffee-shop chalkboard sign reading exactly "CAFÉ DU MATIN — OUVERT" in hand-drawn cursive chalk lettering`
+```
+/nanogen a vintage French coffee-shop chalkboard sign reading exactly "CAFÉ DU MATIN — OUVERT" in hand-drawn cursive chalk lettering
+```
 
 <img src="docs/images/cafe-sign.jpg" alt="French chalkboard sign reading CAFÉ DU MATIN OUVERT" width="40%">
 
@@ -61,7 +117,9 @@ Pro at 2K automatically.
 Point at an existing image and describe the change in plain English.
 No bitmap mask needed.
 
-> `/nanogen --image apple.jpg change the apple to bright green`
+```
+/nanogen --image apple.jpg change the apple to bright green
+```
 
 | Before | After |
 |:---:|:---:|
@@ -72,7 +130,9 @@ No bitmap mask needed.
 Same mechanism, bigger transform. Pose, composition, and armor are
 preserved.
 
-> `/nanogen --image knight.jpg replace the sword with a heavy battle axe, same pose and hand position`
+```
+/nanogen --image knight.jpg replace the sword with a heavy battle axe, same pose and hand position
+```
 
 | Before | After |
 |:---:|:---:|
@@ -83,7 +143,9 @@ preserved.
 Combine `--image` with a style slug. The composition stays; the
 aesthetic is rewritten.
 
-> `/nanogen --image knight.jpg --style pixel-16bit convert this to 16-bit SNES-era pixel art while preserving composition and pose`
+```
+/nanogen --image knight.jpg --style pixel-16bit convert this to 16-bit SNES-era pixel art while preserving composition and pose
+```
 
 | Before | After |
 |:---:|:---:|
@@ -94,7 +156,9 @@ aesthetic is rewritten.
 The frog on the left is a user-supplied sprite (not AI-generated).
 The frog on the right is what the skill returned:
 
-> `/nanogen --image frog-boss.png an even bigger and meaner version of frog_large_boss.png`
+```
+/nanogen --image frog-boss.png an even bigger and meaner version of this frog boss
+```
 
 | Input (user asset) | Amplified |
 |:---:|:---:|
@@ -105,7 +169,9 @@ The frog on the right is what the skill returned:
 Pass up to 14 `--image` flags and Gemini composites them into one
 scene. The first image is the primary reference.
 
-> `/nanogen --image knight.jpg --image apple.jpg the knight triumphantly holding the red apple overhead`
+```
+/nanogen --image knight.jpg --image apple.jpg the knight triumphantly holding the red apple overhead
+```
 
 | Knight | Apple | Composite |
 |:---:|:---:|:---:|
@@ -113,73 +179,23 @@ scene. The first image is the primary reference.
 
 ### Multi-turn refinement
 
-Chain edits by just talking to Claude. The skill remembers the
-prior turn and refines in place rather than regenerating from
-scratch:
+Each follow-up `/nanogen` refines the prior image in place rather
+than regenerating from scratch. The skill spots the continuation
+automatically from its history log — you just keep talking:
 
-> Turn 1 — `/nanogen a single red apple on a white marble table`
->
-> Turn 2 — *"now change the apple to bright green"*
->
-> Turn 3 — *"add a stem and a leaf"*
+```
+/nanogen a single red apple on a white marble table
+```
+```
+/nanogen change the apple to bright green
+```
+```
+/nanogen add a stem and a leaf
+```
 
 | Turn 1 | Turn 2 | Turn 3 |
 |:---:|:---:|:---:|
 | <img src="docs/images/apple.jpg" width="240"> | <img src="docs/images/apple-green.jpg" width="240"> | <img src="docs/images/apple-green-leaf.jpg" width="240"> |
-
----
-
-## Quickstart
-
-1. **Install the skill** into your repo (see below).
-2. **Get a Gemini API key** at <https://aistudio.google.com/app/apikey>
-   and put it in `.env` at your repo root:
-   ```bash
-   echo 'GEMINI_API_KEY=<paste-your-key>' > .env
-   ```
-3. **Talk to Claude Code** in plain English:
-   ```text
-   /nanogen a cozy cabin in a snowy pine forest at dusk
-   ```
-
-That's it. The skill picks style, aspect, size, and output path from
-your request. Pass `--style`, `--aspect`, `--size`, or `--output`
-when you want to override.
-
----
-
-## Install into your repo
-
-**Recommended: ask your agent.** Paste this into Claude Code (or any
-coding agent) in your target repo:
-
-> Install the nanogen skill from github.com/zeveck/nanogen into
-> `.claude/skills/nanogen/`. Fetch the files via
-> raw.githubusercontent.com — don't clone the whole repo. Then
-> remind me to put a Gemini API key in `.env`.
-
-The agent handles permissions, config wiring, and the directory
-layout.
-
-**Or do it by hand:**
-
-```bash
-cd your-repo-root
-mkdir -p .claude/skills/nanogen
-BASE=https://raw.githubusercontent.com/zeveck/nanogen/main/.claude/skills/nanogen
-for f in generate.cjs magicBytes.cjs styles.json SKILL.md reference.md README.md package.json; do
-  curl -sSL "$BASE/$f" -o ".claude/skills/nanogen/$f"
-done
-chmod +x .claude/skills/nanogen/generate.cjs
-```
-
-Then add to `.claude/settings.local.json` under `permissions.allow`:
-
-```
-"Bash(node /abs/path/to/your/repo/.claude/skills/nanogen/generate.cjs:*)"
-```
-
-Smoke-test with `node .claude/skills/nanogen/generate.cjs --help`.
 
 ---
 
