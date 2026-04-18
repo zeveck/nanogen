@@ -21,15 +21,25 @@ always safe and requires no API key.**
 Before any real invocation, verify:
 
 ```bash
-printenv GEMINI_API_KEY >/dev/null || printenv GOOGLE_API_KEY >/dev/null \
-  || echo "no key"
+node .claude/skills/nanogen/generate.cjs --check-key
 ```
 
-If neither is set, STOP. Point the user to
-`reports/nanogen-api-key-setup.md`, which covers getting a key,
-exporting it, and verifying it works. Do not burn tokens retrying an
-`E_MISSING_API_KEY` dance — the CLI fails fast and gives no
-interactive prompt.
+`--check-key` runs the CLI's actual key resolver — it checks
+`GEMINI_API_KEY` and `GOOGLE_API_KEY` in shell env AND walks
+`.env` files from the cwd and the skill directory. Never hits
+HTTP; never reveals the full key. Exit codes:
+
+- **Exit 0** — key reachable. stdout: `{"success":true,"source":"<where>","keyPrefix":"<first 4>","keyLength":N}`. Proceed.
+- **Exit 1** — no key anywhere. stdout: `{"success":false,"code":"E_MISSING_API_KEY",...}`. STOP. Point the user to `reports/nanogen-api-key-setup.md`, which covers getting a key and putting it in `.env` at the repo root.
+
+Do NOT use `printenv GEMINI_API_KEY` as the preflight check —
+that ONLY reads shell-exported env vars and misses the documented
+setup workflow (key in `.env`, not exported). `--check-key` is
+the correct probe.
+
+If the user gets stuck on `E_MISSING_API_KEY`, do not retry
+blindly — the CLI fails fast and gives no interactive prompt.
+Point them at the setup doc and wait for them to add the key.
 
 ## 1. Two modes
 

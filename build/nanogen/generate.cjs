@@ -80,7 +80,7 @@ const REPEATABLE_FLAGS = new Set([
   "--image", "--negative", "--safety", "--style", "--region",
 ]);
 const BOOLEAN_FLAGS = new Set([
-  "--dry-run", "--no-history", "--help", "-h",
+  "--dry-run", "--no-history", "--help", "-h", "--check-key",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -291,6 +291,10 @@ function parseArgs(argv) {
     }
     if (tok === "--dry-run") {
       args.dryRun = true;
+      continue;
+    }
+    if (tok === "--check-key") {
+      args.checkKey = true;
       continue;
     }
     if (tok === "--no-history") {
@@ -618,6 +622,11 @@ function printHelp() {
     "                           with --history-parent.",
     "  --no-history             Skip history append.",
     "  --dry-run                Print would-be request as JSON, exit 0.",
+    "  --check-key              Report whether an API key is reachable",
+    "                           (via shell env or .env walker). Exit 0",
+    "                           if found, 1 with E_MISSING_API_KEY if not.",
+    "                           Never makes an HTTP call; never reveals",
+    "                           the full key (prints only first 4 chars).",
     "  --help, -h               Show this help.",
     "",
     "Examples:",
@@ -1666,6 +1675,33 @@ function main() {
   if (args.help) {
     printHelp();
     process.exit(0);
+  }
+
+  // --check-key: run the actual resolveApiKey() (same logic the real
+  // CLI path uses — checks shell env AND walks .env from cwd + __dirname)
+  // and emit one JSON line reporting source + key prefix. Never hits
+  // HTTP, never reveals the full key. Used by SKILL.md and CI smoke
+  // tests to verify a key is reachable before spending quota. Exits 0
+  // on success, 1 with E_MISSING_API_KEY otherwise.
+  if (args.checkKey) {
+    const resolved = resolveApiKey();
+    if (resolved && resolved.key) {
+      const prefix = resolved.key.slice(0, 4);
+      process.stdout.write(
+        JSON.stringify({
+          success: true,
+          source: resolved.source,
+          keyPrefix: prefix,
+          keyLength: resolved.key.length,
+        }) + "\n"
+      );
+      process.exit(0);
+    }
+    emitError(
+      "E_MISSING_API_KEY",
+      "no GEMINI_API_KEY or GOOGLE_API_KEY in environment or .env; see reports/nanogen-api-key-setup.md"
+    );
+    process.exit(1);
   }
 
   const v = validateArgs(args, stylesIndex);

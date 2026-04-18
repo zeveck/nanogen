@@ -383,4 +383,72 @@ test("closest .env wins over parent (walker order)", () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// --check-key flag (sub-plan 3 post-verification fix)
+// ---------------------------------------------------------------------------
+// --check-key runs resolveApiKey() and reports reachability via stdout JSON.
+// Never hits HTTP; never prints the full key. Used by SKILL.md's top rule
+// so the agent preflight works regardless of whether the key lives in shell
+// env or a .env file (the printenv-only preflight was broken: it missed
+// the .env-based workflow the setup doc documents).
+
+// 13. --check-key with a real key in .env → exit 0, source + prefix reported.
+test("--check-key finds key in .env → exit 0, reports source + prefix", () => {
+  const dir = mkTmp();
+  try {
+    const envFile = path.join(dir, ".env");
+    fs.writeFileSync(envFile, "GEMINI_API_KEY=AQ.Avery-realistic-2026-format-xyz\n");
+    const r = spawnSync(
+      process.execPath,
+      [CLI, "--check-key"],
+      { env: cleanSubprocessEnv({ NANOGEN_DOTENV_PATH: envFile }), encoding: "utf8" }
+    );
+    assert.equal(r.status, 0, `expected exit 0; got ${r.status}; stderr=${r.stderr}`);
+    const j = JSON.parse(r.stdout.trim());
+    assert.equal(j.success, true);
+    assert.ok(j.source && j.source.startsWith(".env:"), `source should start with .env: got ${j.source}`);
+    assert.ok(j.source.endsWith(":GEMINI_API_KEY"), `source should end with :GEMINI_API_KEY; got ${j.source}`);
+    assert.equal(j.keyPrefix, "AQ.A", "keyPrefix must be exactly first 4 chars");
+    assert.ok(j.keyLength > 0);
+    // Critical: the full key must NOT appear anywhere in stdout.
+    assert.ok(!r.stdout.includes("realistic"),
+      "full key must not leak in --check-key output");
+  } finally {
+    rmTmp(dir);
+  }
+});
+
+// 14. --check-key with no key anywhere → exit 1, E_MISSING_API_KEY.
+test("--check-key with no key → exit 1, E_MISSING_API_KEY", () => {
+  const dir = mkTmp();
+  try {
+    const nonexistent = path.join(dir, ".env-never-created");
+    const r = spawnSync(
+      process.execPath,
+      [CLI, "--check-key"],
+      { env: cleanSubprocessEnv({ NANOGEN_DOTENV_PATH: nonexistent }), encoding: "utf8" }
+    );
+    assert.equal(r.status, 1, `expected exit 1; got ${r.status}`);
+    const j = JSON.parse(r.stdout.trim());
+    assert.equal(j.success, false);
+    assert.equal(j.code, "E_MISSING_API_KEY");
+  } finally {
+    rmTmp(dir);
+  }
+});
+
+// 15. --check-key with GEMINI_API_KEY in shell env → exit 0, env source.
+test("--check-key finds shell env key → source is env:GEMINI_API_KEY", () => {
+  const r = spawnSync(
+    process.execPath,
+    [CLI, "--check-key"],
+    { env: cleanSubprocessEnv({ GEMINI_API_KEY: "shell-env-key-value-xyz", NANOGEN_DOTENV_PATH: "/nonexistent" }), encoding: "utf8" }
+  );
+  assert.equal(r.status, 0, `stderr=${r.stderr}`);
+  const j = JSON.parse(r.stdout.trim());
+  assert.equal(j.success, true);
+  assert.equal(j.source, "env:GEMINI_API_KEY");
+  assert.equal(j.keyPrefix, "shel");
+});
+
 runAll();
