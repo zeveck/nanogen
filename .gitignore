@@ -20,3 +20,8 @@
 # specific input.
 assets/
 .nanogen-history.jsonl
+
+# Claude Code session artifacts. scheduled_tasks.lock holds the
+# sessionId + PID that owns the in-memory cron scheduler; tied to
+# a single Claude process, meaningless across sessions.
+.claude/scheduled_tasks.lock
