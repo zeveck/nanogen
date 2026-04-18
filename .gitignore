@@ -12,3 +12,11 @@
 # repo root is a misapplication of the convention — but ignoring here
 # prevents accidental commits in case something writes one.
 .landed
+
+# Generated images + history (matches imagegen's convention). SKILL.md
+# routes /nanogen outputs under assets/<category>/; those are per-user
+# disposable artifacts, not source-controlled. Commit source images
+# intentionally via `git add -f assets/...` if you need to version a
+# specific input.
+assets/
+.nanogen-history.jsonl
