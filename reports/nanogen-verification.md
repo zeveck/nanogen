@@ -43,10 +43,10 @@ env -u GEMINI_API_KEY -u GOOGLE_API_KEY -u NANOGEN_* \
 ```
 
 - Exit 0.
-- **168/168 tests passing** across 11 files:
+- **171/171 tests passing** across 11 files:
   `test_parse_args.cjs (30)`, `test_styles.cjs (21)`,
   `test_request_builder.cjs (14)`, `test_response_parser.cjs (21)`,
-  `test_http_retry.cjs (13)`, `test_env.cjs (12)`,
+  `test_http_retry.cjs (13)`, `test_env.cjs (15)`,
   `test_history.cjs (9)`, `test_integration.cjs (10)`,
   `test_edit_multi_image.cjs (18)`, `test_multi_turn.cjs (16)`,
   `test_docs_lint.cjs (4)`.

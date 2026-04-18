@@ -37,7 +37,7 @@ install, no SDK — just `fetch` and Node built-ins.
   or Claude-Code `/nanogen` skill (agent-driven style selection +
   iteration verbs).
 - **Zero npm dependencies.** Uses Node 20.12+ built-ins only.
-- **~170 offline tests** covering every validation code, refusal
+- **171 offline tests** covering every validation code, refusal
   path, retry scenario, env-var edge case, and end-to-end mock-
   server round-trip including `thoughtSignature` preservation.
 
@@ -140,7 +140,7 @@ target repo's root.
 │   ├── SUB_2_EDIT_FLOW.md              ← edit flow + multi-turn
 │   └── SUB_3_SKILL_INSTALL.md          ← SKILL.md + install + checkpoint
 ├── build/nanogen/                     ← canonical dev source
-│   ├── generate.cjs                   ← the CLI (~1500 lines)
+│   ├── generate.cjs                   ← the CLI (~2000 lines)
 │   ├── styles.json                    ← 72 presets × 10 categories
 │   ├── magicBytes.cjs                 ← PNG/JPEG/WEBP magic-byte check
 │   ├── SKILL.md                       ← /nanogen skill playbook
@@ -149,7 +149,7 @@ target repo's root.
 │   ├── package.json                   ← test script, engines pin
 │   ├── tools/                         ← authoring-only (not installed)
 │   │   └── render-style-reference.cjs
-│   ├── tests/                         ← ~170 offline tests, 11 files
+│   ├── tests/                         ← 171 offline tests, 11 files
 │   │   ├── test_parse_args.cjs        ← arg validation + 21 error codes
 │   │   ├── test_styles.cjs            ← catalog validation
 │   │   ├── test_request_builder.cjs   ← golden-tested request bodies

@@ -1308,13 +1308,14 @@ function parseRetryAfter(headerValue) {
   return n * 1000;
 }
 
-// Thrown when the response body cannot be parsed. Non-retryable by design.
+// Thrown when the response body cannot be parsed. Non-retryable by
+// design — the `instanceof BodyParseError` check in fetchWithRetry is
+// what drives the no-retry decision, no per-instance flag needed.
 class BodyParseError extends Error {
   constructor(message, bodySnippet) {
     super(message);
     this.name = "BodyParseError";
     this.bodySnippet = bodySnippet;
-    this.nonRetryable = true;
   }
 }
 

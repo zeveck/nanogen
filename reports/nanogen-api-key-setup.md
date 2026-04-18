@@ -235,7 +235,7 @@ Simple. After you put the key in `.env` (section 3), tell me
 you're ready and I'll verify the implementation:
 
 - Dry-run (free) — smoke test
-- Offline test suite in a clean env — 168 tests must pass
+- Offline test suite in a clean env — 171 tests must pass
 - One real generate (~$0.034) — proves the full HTTP / auth /
   response-parse / file-write / history chain
 - One real edit via `--region` (~$0.034) — proves edit mode
