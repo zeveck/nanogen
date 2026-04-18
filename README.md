@@ -347,16 +347,22 @@ Production users never set the `NANOGEN_*` vars.
 
 ## Known quirks + limitations
 
-- **Gemini may return JPEG when you ask for `.png`.** The CLI writes
-  bytes as-returned and emits a stderr warning:
+- **Gemini returns JPEG even when you ask for `.png`.** The AI
+  Studio endpoint (what this CLI uses) has no parameter to control
+  output format — the Gemini docs explicitly omit any
+  `outputMimeType` on the image API. Vertex AI's same models DO
+  expose `imageConfig.outputMimeType` but switching to Vertex
+  requires service-account auth and was ruled out of scope.
+  The CLI's response: **write the file at a name that matches the
+  actual MIME.** If you pass `--output foo.png` and the API
+  returns JPEG, the file on disk is `foo.jpg`, and the success
+  JSON reports:
   ```
-  nanogen: output extension ".png" but API returned image/jpeg; bytes written as-is.
+  {"success":true,"output":"foo.jpg","renamed":{"from":"foo.png","to":"foo.jpg","reason":"..."},...}
   ```
-  The file name is the one you specified; the history row records the
-  actual MIME in `outputFormat` (vs. `outputExtension` from your flag).
-  Using that same file as `--image` input will hit `E_IMAGE_MIME_MISMATCH`
-  unless you rename it to match the real bytes. Workaround for now:
-  `cp out.png out.jpg` or ask for `.jpg` up front.
+  Plus a stderr warning explaining the rename and how to silence
+  it (pass `--output foo.jpg` up front). Any script reading the
+  `output` field from the success JSON will Just Work.
 - **SynthID watermark.** Every image carries an invisible
   watermark in pixel data; can't be disabled. Light edits preserve
   it; aggressive re-encoding may destroy it. API outputs have no

@@ -1885,38 +1885,73 @@ async function runHttpFlow(args, stylesIndex) {
   }
 
   // Success path. parseResponse guarantees parsed.image is a valid Buffer
-  // whose magic bytes match a supported format, so writeFileSync is safe.
+  // whose magic bytes match a supported format.
+  //
+  // Extension-vs-returned-MIME handling: Gemini frequently returns JPEG
+  // bytes even when the user asked for `.png`. Rather than writing
+  // JPEG bytes under a lying .png name (which confuses downstream
+  // tooling AND trips our own rule-19 input-validation when the
+  // user tries to use the file as --image input on the next turn),
+  // we RENAME the output to match the actual MIME. The success JSON
+  // reports the actually-written path via `output`; if a rename
+  // happened, `renamed: {from, to, reason}` is included so scripts
+  // can detect it. The stderr warning tells the user how to avoid
+  // the rename (pass --output with a matching extension up front).
+  const mimeToFmt = {
+    "image/png": "png",
+    "image/jpeg": "jpeg",
+    "image/webp": "webp",
+  };
+  // Preferred user-friendly file extensions for each format.
+  const fmtToExt = {
+    png: "png",
+    jpeg: "jpg",
+    webp: "webp",
+  };
+  const actualFmt = mimeToFmt[parsed.responseMimeType] || null;
+  const declaredExt = path.extname(args.output).slice(1).toLowerCase();
+  const normalizedDeclaredExt = normalizedExtFormat(declaredExt);
+  const needsRename = actualFmt && normalizedDeclaredExt && actualFmt !== normalizedDeclaredExt;
+
+  let actualPath = args.output;
+  let renameInfo = null;
+  if (needsRename) {
+    const targetExt = fmtToExt[actualFmt];
+    const dir = path.dirname(args.output);
+    const baseNoExt = path.basename(args.output, path.extname(args.output));
+    actualPath = path.join(dir, `${baseNoExt}.${targetExt}`);
+    renameInfo = {
+      from: args.output,
+      to: actualPath,
+      reason: `API returned image/${actualFmt} but requested extension was ".${declaredExt}"`,
+    };
+    process.stderr.write(
+      `nanogen: API returned image/${actualFmt}; wrote "${actualPath}" (renamed from ".${declaredExt}" to match actual MIME; pass --output with a matching extension to silence this).\n`
+    );
+  }
+
   try {
-    fs.mkdirSync(path.dirname(path.resolve(args.output)), { recursive: true });
-    fs.writeFileSync(args.output, parsed.image);
+    fs.mkdirSync(path.dirname(path.resolve(actualPath)), { recursive: true });
+    fs.writeFileSync(actualPath, parsed.image);
   } catch (err) {
     emitError("E_UNEXPECTED_HTTP",
       "failed to write output: " + (err && err.message || String(err)));
     return 1;
   }
 
-  // Extension-vs-returned-MIME mismatch warning. We pass through the bytes
-  // as-is regardless — renaming or transcoding would be surprising.
-  const mimeToFmt = {
-    "image/png": "png",
-    "image/jpeg": "jpeg",
-    "image/webp": "webp",
-  };
-  const actualFmt = mimeToFmt[parsed.responseMimeType] || null;
-  const declaredExt = path.extname(args.output).slice(1).toLowerCase();
-  const normalizedExt = normalizedExtFormat(declaredExt);
-  if (actualFmt && normalizedExt && actualFmt !== normalizedExt) {
-    process.stderr.write(
-      `nanogen: output extension ".${declaredExt}" but API returned image/${actualFmt}; bytes written as-is.\n`
-    );
-  }
-
   let bytesWritten = 0;
   try {
-    bytesWritten = fs.statSync(args.output).size;
+    bytesWritten = fs.statSync(actualPath).size;
   } catch (_) {
     bytesWritten = parsed.image ? parsed.image.length : 0;
   }
+
+  // From this point on, the canonical output path is actualPath.
+  // Stash on args so downstream helpers (buildHistoryEntry,
+  // deriveHistoryId) see the corrected path without needing a new
+  // parameter.
+  const requestedOutput = args.output;
+  args.output = actualPath;
 
   let historyWarning = null;
   if (!args.noHistory) {
@@ -1927,16 +1962,21 @@ async function runHttpFlow(args, stylesIndex) {
 
   const payload = {
     success: true,
-    output: args.output,
-    historyId,
+    output: actualPath,
+    historyId: deriveHistoryId(args),
     bytes: bytesWritten,
     model: args.model || DEFAULT_MODEL,
     aspectRatio: args.aspect || DEFAULT_ASPECT,
     imageSize: args.size || DEFAULT_SIZE,
     refusalReason: null,
   };
+  if (renameInfo) payload.renamed = renameInfo;
   if (historyWarning) payload.historyWarning = historyWarning;
   process.stdout.write(JSON.stringify(payload) + "\n");
+
+  // Restore requestedOutput on args purely for cleanliness / reuse by
+  // any caller that imports the module and re-invokes main() (rare).
+  args.output = requestedOutput;
   return 0;
 }
 

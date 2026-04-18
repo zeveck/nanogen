@@ -361,10 +361,14 @@ test("thoughtSignature round-trip: history row contains sig-abc", async () => {
   }
 });
 
-// 6. Output ext vs MIME mismatch: mock returns image/jpeg when --output is .png.
-// Expect pinned stderr warning; file still written; history row has
-// outputFormat=jpeg, outputExtension=png.
-test("ext-vs-MIME mismatch: stderr warning; file written; history reflects actual MIME", async () => {
+// 6. Output ext vs MIME mismatch: mock returns image/jpeg when --output is
+// .png. The CLI renames the output to match the actual MIME (writes a .jpg
+// file instead of a .png one) so the filename never lies about its bytes.
+// This also prevents E_IMAGE_MIME_MISMATCH on a subsequent --image use of
+// the same file. AI Studio doesn't support server-side output-format
+// control (Vertex AI does; we don't use Vertex), so correcting the
+// filename is the zero-dep fix.
+test("ext-vs-MIME mismatch: output renamed to match actual MIME", async () => {
   const mock = await makeMock([
     (req, res) => respondJson(res, 200,
       successBody({ mimeType: "image/jpeg", data: TINY_JPEG_B64 })
@@ -372,26 +376,51 @@ test("ext-vs-MIME mismatch: stderr warning; file written; history reflects actua
   ]);
   const tmp = mkTmp();
   try {
-    const outPath = path.join(tmp, "actually-jpeg.png");
+    const requested = path.join(tmp, "actually-jpeg.png");
+    const renamed = path.join(tmp, "actually-jpeg.jpg");
     const r = await runCLI(
-      ["--prompt", "portrait", "--output", outPath],
+      ["--prompt", "portrait", "--output", requested],
       { NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}` },
       tmp
     );
     assert.equal(r.status, 0,
       `exit 0 expected; stderr=${r.stderr}; stdout=${r.stdout}`);
+
+    // stderr warning: explains the rename, tells the user how to silence it.
     assert.ok(
-      r.stderr.includes(
-        'nanogen: output extension ".png" but API returned image/jpeg; bytes written as-is.'
-      ),
-      `expected pinned ext-vs-MIME warning; got stderr: ${r.stderr}`
+      r.stderr.includes('API returned image/jpeg; wrote') &&
+      r.stderr.includes(renamed) &&
+      r.stderr.includes('renamed from ".png"'),
+      `expected rename-to-match-MIME warning; got stderr: ${r.stderr}`
     );
-    assert.ok(fs.existsSync(outPath), "file should be written despite mismatch");
+
+    // File written to the renamed path, NOT the requested path.
+    assert.ok(fs.existsSync(renamed),
+      `renamed file should exist at ${renamed}`);
+    assert.ok(!fs.existsSync(requested),
+      `requested path should NOT exist (we renamed to ${renamed}); but ${requested} was found`);
+
+    // Success JSON reports actual written path + a `renamed` object with
+    // from/to/reason so scripts can detect the event programmatically.
+    const successJson = JSON.parse(r.stdout.trim());
+    assert.equal(successJson.success, true);
+    assert.equal(successJson.output, renamed,
+      "success.output must be the actual written path, not the requested one");
+    assert.ok(successJson.renamed, "success.renamed object must be present on mismatch");
+    assert.equal(successJson.renamed.from, requested);
+    assert.equal(successJson.renamed.to, renamed);
+    assert.ok(successJson.renamed.reason &&
+      successJson.renamed.reason.includes("image/jpeg"));
+
+    // History row reflects the renamed path + actual MIME + extension that
+    // matches the bytes on disk. No "lying extension" in the history.
     const rows = readHistoryFile(tmp);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0].outputFormat, "jpeg",
-      "outputFormat should reflect actual MIME, not extension");
-    assert.equal(rows[0].outputExtension, "png");
+    assert.equal(rows[0].output, renamed,
+      "history.output must be the actual written path");
+    assert.equal(rows[0].outputFormat, "jpeg");
+    assert.equal(rows[0].outputExtension, "jpg",
+      "outputExtension must reflect the renamed file, not the original request");
   } finally {
     await closeMock(mock);
     rmTmp(tmp);

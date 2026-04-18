@@ -584,7 +584,7 @@ for root causes.
 1. `nanogen: --safety <CATEGORY> specified multiple times; using last value`
 2. `nanogen: using GOOGLE_API_KEY. Prefer GEMINI_API_KEY to match Gemini docs.`
 3. `nanogen: --history-parent "<value>" not found in .nanogen-history.jsonl; continuing anyway.`
-4. `nanogen: output extension ".png" but API returned image/<x>; bytes written as-is.`
+4. `nanogen: API returned image/<x>; wrote "<renamed-path>" (renamed from ".<requested-ext>" to match actual MIME; pass --output with a matching extension to silence this).`
 5. `nanogen: --history-continue source used model "<A>"; continuing with model "<B>". Gemini may 400 on thoughtSignature format mismatch.`
 
 `<CATEGORY>`, `<value>`, `<x>`, `<A>`, and `<B>` are placeholder
