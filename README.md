@@ -17,6 +17,24 @@ install — just Node 20.12+ and `fetch`.
 
 ---
 
+## Choosing a Skill
+
+`nanogen` is one of three sibling image-generation skills. They are not
+interchangeable; each one exposes different strengths from its underlying API.
+
+| Skill | Back end | Good fit | Tradeoffs |
+|-------|----------|----------|-----------|
+| [`imagegen`](https://github.com/zeveck/imagegen) | OpenAI `gpt-image-1` | Classic game assets, direct transparent PNG/WebP sprites and icons | Older OpenAI image model, legacy size set |
+| [`imagegen2`](https://github.com/zeveck/imagegen2) | OpenAI `gpt-image-2` | Current OpenAI image path, flexible sizes up to 4K-class outputs, high-fidelity edits | No native transparent backgrounds; uses an explicit `gpt-image-1.5` fallback only when requested |
+| `nanogen` | Google Gemini / Nano Banana image models | Rich style catalog, natural-language edits, multi-image composition, multi-turn refinement | No native alpha output; often returns JPEG and uses chromakey/post-processing for transparent-style assets |
+
+Use `nanogen` when you want the Gemini/Nano Banana editing workflow: style
+presets, natural-language regional edits, multi-image composition, and
+multi-turn refinement. Use `imagegen` when true transparent PNG/WebP output is
+the primary requirement.
+
+---
+
 ## Getting started
 
 1. **Install the skill.** Paste this into Claude Code (or any coding

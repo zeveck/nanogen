@@ -6,10 +6,8 @@ multi-image edits (up to 14 references), natural-language region
 guidance, and multi-turn continuation with `thoughtSignature`
 round-tripping (the Gemini 3 correctness fix).
 
-See [`plans/SUB_1_CLI_CORE.md`](../../plans/SUB_1_CLI_CORE.md) and
-[`plans/SUB_2_EDIT_FLOW.md`](../../plans/SUB_2_EDIT_FLOW.md) for the
-authoritative specs. User-facing `SKILL.md` / `reference.md` for agent
-integration land with sub-plan 3.
+The folder also includes `SKILL.md` for agent integration, `reference.md` for
+usage details, and `styles.json` for the built-in style catalog.
 
 Requires **Node.js >= 20.12** (`process.loadEnvFile` and
 `AbortSignal.timeout` are both used).
@@ -31,7 +29,7 @@ and multi-turn continuation patterns.
 
 | Flag | Type | Default | Notes |
 |------|------|---------|-------|
-| `--prompt <str>` | string | — | Required. |
+| `--prompt <str>` | string | — | Required for generation. Optional for edit mode when `--image` and `--region` are supplied. |
 | `--output <path>` | string | — | Required. Ext in `{.png,.jpg,.jpeg,.webp}`. Parent dirs auto-created. |
 | `--model <id>` | string | `gemini-3.1-flash-image-preview` | One of `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`, `gemini-2.5-flash-image`. |
 | `--aspect <r>` | string | `1:1` | 14 valid ratios: `1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1`. |
@@ -91,7 +89,7 @@ Schema (success):
       "outputFormat": "png",          // from actual API MIME, not extension
       "outputExtension": "png",       // from --output path
       "refusalReason": null,
-      "thoughtSignature": null        // round-tripped across turns in sub-plan 2
+      "thoughtSignature": null        // round-tripped across turns
       // "inputImages": [...]         // present only when --image given
     }
 
@@ -104,10 +102,10 @@ The sha-8 suffix prevents collisions when two different paths slugify
 to the same string.
 
 **Ext-vs-MIME mismatch:** if the API returns a different format than
-`--output`'s extension implies, the bytes are written as-is and a
-pinned warning is emitted to stderr:
+`--output`'s extension implies, the CLI writes the file with an extension that
+matches the actual MIME type and emits a pinned warning to stderr:
 
-    nanogen: output extension ".png" but API returned image/jpeg; bytes written as-is.
+    nanogen: API returned image/jpeg; wrote "sprite.jpg" (renamed from ".png" to match actual MIME; pass --output with a matching extension to silence this).
 
 ## Environment variables
 
@@ -205,10 +203,10 @@ requests during `npm test`.
 ### Integration test coverage
 
 `tests/test_integration.cjs` exercises the full CLI end-to-end against
-an in-process mock server: successful generate + retry ladder + refusal
-path (sub-plan 1 Phase 4), plus multi-turn round-trip + multi-image
-edit + continuation-refused-by-SAFETY + dry-run-no-HTTP (sub-plan 2
-Phase 3). The two-call round-trip is the Gemini-3 correctness proof:
+an in-process mock server: successful generate, retry ladder, refusal
+path, multi-turn round-trip, multi-image edit, continuation refused by
+SAFETY, and dry-run without HTTP. The two-call round-trip is the
+Gemini-3 correctness proof:
 invocation 1 persists `thoughtSignature`; invocation 2 reads it back
 and the mock server asserts it is present byte-for-byte at
 `body.contents[1].parts[1].thoughtSignature`.
@@ -263,9 +261,9 @@ suffix composition breaks `tests/test_edit_multi_image.cjs` loudly.
 | `E_REGION_WITHOUT_IMAGE` | `--region` set but no `--image` given. |
 | `E_EDIT_NEEDS_INSTRUCTION` | `--image` set but no `--prompt` and no `--region`. |
 
-Sub-plan 1's `E_MISSING_PROMPT_OR_IMAGE` still fires when BOTH
-`--prompt` AND `--image` are absent — the code name was chosen
-forward-compatibly so no rename is needed.
+`E_MISSING_PROMPT_OR_IMAGE` still fires when BOTH `--prompt` AND
+`--image` are absent. The code name covers generation and edit mode, so
+no separate edit-specific rename is needed.
 
 ### Multi-turn continuation
 
@@ -322,6 +320,6 @@ The warning does NOT block the request; model switches mid-conversation
 are technically allowed but almost always produce 400 on signature
 format mismatch.
 
-Sub-plan 3 ships `SKILL.md` / `reference.md` for agent integration —
-this README is for direct CLI users. The multi-turn round-trip is
-covered end-to-end by `tests/test_integration.cjs`.
+`SKILL.md` and `reference.md` cover agent integration; this README is
+for direct CLI users. The multi-turn round-trip is covered end-to-end by
+`tests/test_integration.cjs`.
