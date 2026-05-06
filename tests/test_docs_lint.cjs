@@ -26,7 +26,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const ROOT = path.resolve(__dirname, "..");
+const ROOT = path.resolve(__dirname, "..", "build", "nanogen");
 
 const FORBIDDEN_TOKENS = [
   "studio ghibli",

@@ -190,7 +190,7 @@ stays focused.
 
 ## Tests
 
-From `build/nanogen/`:
+From the repo root:
 
     npm test
 

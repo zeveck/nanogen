@@ -18,7 +18,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const gen = require("../generate.cjs");
+const gen = require("../build/nanogen/generate.cjs");
 
 // ---------------------------------------------------------------------------
 // withCleanEnv — same NUKE_KEYS as sibling tests.
@@ -70,7 +70,7 @@ const FIX = path.resolve(__dirname, "fixtures");
 const TINY_PNG = path.join(FIX, "tiny-1x1.png");
 const TINY_PNG_BYTES = fs.readFileSync(TINY_PNG);
 const TINY_BASE64 = TINY_PNG_BYTES.toString("base64");
-const CLI = path.resolve(__dirname, "..", "generate.cjs");
+const CLI = path.resolve(__dirname, "..", "build", "nanogen", "generate.cjs");
 
 function loadGoldenExpanded(name) {
   const raw = fs.readFileSync(path.join(FIX, name), "utf8");

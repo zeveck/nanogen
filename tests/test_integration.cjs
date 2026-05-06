@@ -13,7 +13,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
-const CLI = path.resolve(__dirname, "..", "generate.cjs");
+const CLI = path.resolve(__dirname, "..", "build", "nanogen", "generate.cjs");
 
 // ---------------------------------------------------------------------------
 // withCleanEnv + subprocess env helpers

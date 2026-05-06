@@ -9,11 +9,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const CLI = path.resolve(__dirname, "..", "generate.cjs");
-const REAL_STYLES = path.resolve(__dirname, "..", "styles.json");
+const CLI = path.resolve(__dirname, "..", "build", "nanogen", "generate.cjs");
+const REAL_STYLES = path.resolve(__dirname, "..", "build", "nanogen", "styles.json");
 
 // Load the module once for in-process validator tests.
-const gen = require("../generate.cjs");
+const gen = require("../build/nanogen/generate.cjs");
 
 // ---------------------------------------------------------------------------
 // withCleanEnv — copied from test_parse_args.cjs (plan constraint). Tests

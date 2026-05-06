@@ -8,7 +8,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const CLI = path.resolve(__dirname, "..", "generate.cjs");
+const CLI = path.resolve(__dirname, "..", "build", "nanogen", "generate.cjs");
 
 // ---------------------------------------------------------------------------
 // withCleanEnv: snapshot process.env, DELETE relevant vars, run fn, restore.

@@ -18,7 +18,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const gen = require("../generate.cjs");
+const gen = require("../build/nanogen/generate.cjs");
 
 // ---------------------------------------------------------------------------
 // withCleanEnv — same NUKE_KEYS as sibling tests.
@@ -69,7 +69,7 @@ function cleanEnv(extra = {}) {
 const FIX = path.resolve(__dirname, "fixtures");
 const TINY_PNG = path.join(FIX, "tiny-1x1.png");
 const TINY_BASE64 = fs.readFileSync(TINY_PNG).toString("base64");
-const CLI = path.resolve(__dirname, "..", "generate.cjs");
+const CLI = path.resolve(__dirname, "..", "build", "nanogen", "generate.cjs");
 
 // Load golden and substitute the "<tiny-1x1-base64>" placeholder with the
 // real base64 string. We walk the body's content parts and replace any

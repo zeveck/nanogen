@@ -16,7 +16,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 
-const CLI = path.resolve(__dirname, "..", "generate.cjs");
+const CLI = path.resolve(__dirname, "..", "build", "nanogen", "generate.cjs");
 
 // ---------------------------------------------------------------------------
 // withCleanEnv + subprocess env helpers
@@ -418,7 +418,7 @@ test("400 INVALID_ARGUMENT + content policy → E_CONTENT_POLICY, no retry", asy
 
 // 12. mapHttpError direct unit tests (covers every row of the 11-row table).
 test("mapHttpError: all 11 rows of the mapping table", () => {
-  const GEN = require("../generate.cjs");
+  const GEN = require("../build/nanogen/generate.cjs");
   // 400 + INVALID_ARGUMENT + policy → E_CONTENT_POLICY
   assert.equal(
     GEN.mapHttpError(400, JSON.stringify({ error: { status: "INVALID_ARGUMENT", msg: "content policy violation" } })),
@@ -453,7 +453,7 @@ test("mapHttpError: all 11 rows of the mapping table", () => {
 
 // 13. parseRetryAfter unit tests: integer seconds, bounds, non-numeric.
 test("parseRetryAfter: integer bounds + non-numeric", () => {
-  const GEN = require("../generate.cjs");
+  const GEN = require("../build/nanogen/generate.cjs");
   assert.equal(GEN.parseRetryAfter("1"), 1000);
   assert.equal(GEN.parseRetryAfter("60"), 60000);
   assert.equal(GEN.parseRetryAfter("0"), null, "0 seconds rejected");

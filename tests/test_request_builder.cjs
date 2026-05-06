@@ -18,7 +18,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const gen = require("../generate.cjs");
+const gen = require("../build/nanogen/generate.cjs");
 
 // ---------------------------------------------------------------------------
 // withCleanEnv — copied from Phase 1/2 tests. DELETES nanogen/Gemini vars
@@ -325,7 +325,7 @@ test("headers carry <resolved-at-send-time> placeholder", () => {
 // structurally when invoked as a subprocess (AC for Phase 3).
 test("CLI --dry-run with all flags populated matches request-full-featured.json", () => {
   const { spawnSync } = require("node:child_process");
-  const CLI = path.resolve(__dirname, "..", "generate.cjs");
+  const CLI = path.resolve(__dirname, "..", "build", "nanogen", "generate.cjs");
   const golden = loadGolden("request-full-featured.json");
   const env = { PATH: process.env.PATH || "/usr/bin:/bin" };
   if (process.env.HOME) env.HOME = process.env.HOME;

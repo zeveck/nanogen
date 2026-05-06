@@ -15,7 +15,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const gen = require("../generate.cjs");
+const gen = require("../build/nanogen/generate.cjs");
 
 const FIX = path.resolve(__dirname, "fixtures");
 function loadFixture(name) {
