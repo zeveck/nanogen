@@ -94,8 +94,8 @@ fi
 # ─── CONFIGURE: set your test command patterns ────────────────────────
 # Piping test output (loses failures, forces re-runs -- capture to file instead)
 # Replace the placeholder values with your actual test command patterns.
-UNIT_TEST_CMD="{{UNIT_TEST_CMD}}"
-FULL_TEST_CMD="{{FULL_TEST_CMD}}"
+UNIT_TEST_CMD="npm test"
+FULL_TEST_CMD="npm test"
 
 # Build regex pattern from configured test commands (fall back to generic if unconfigured)
 if [[ "$UNIT_TEST_CMD" == *'{{'* ]] || [[ "$FULL_TEST_CMD" == *'{{'* ]]; then
