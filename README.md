@@ -1,72 +1,50 @@
 # nanogen
 
-> A Claude Code skill (and standalone CLI) for image generation and
-> editing via Google's Nano Banana / Gemini image models.
-
-```
-/nanogen a misty Scottish highland cliff at sunrise overlooking the sea, dramatic cinematic concept art, 16:9
-```
-
-<img src="docs/images/highland-cliff.jpg" alt="misty Scottish highland cliff at sunrise" width="100%">
-
-Install `/nanogen` into your repo, drop a Gemini API key into `.env`,
-and talk to Claude Code in plain English. The skill picks a style
-from its 72-preset catalog, chooses sensible defaults for model /
-aspect / size, and calls the Gemini image API. No SDK, no npm
-install — just Node 20.12+ and `fetch`.
+Generate and edit images via Google's Gemini / Nano Banana models, from
+[Claude Code](https://github.com/anthropics/claude-code) or a terminal.
+Style presets, natural-language edits, multi-image composition, and
+multi-turn refinement. Zero npm deps; just Node 20.12+ and a Gemini API
+key.
 
 ---
 
 ## Choosing a Skill
 
 `nanogen` is one of three sibling image-generation skills. They are not
-interchangeable; each one exposes different strengths from its underlying API.
+interchangeable; each one exposes different strengths from its underlying
+API.
 
 | Skill | Back end | Good fit | Tradeoffs |
 |-------|----------|----------|-----------|
 | [`imagegen`](https://github.com/zeveck/imagegen) | OpenAI `gpt-image-1` | Classic game assets, direct transparent PNG/WebP sprites and icons | Older OpenAI image model, legacy size set |
-| [`imagegen2`](https://github.com/zeveck/imagegen2) | OpenAI `gpt-image-2` | Current OpenAI image path, flexible sizes up to 4K-class outputs, high-fidelity edits | No native transparent backgrounds; uses an explicit `gpt-image-1.5` fallback only when requested |
+| [`imagegen2`](https://github.com/zeveck/imagegen2) | OpenAI `gpt-image-2` | Current OpenAI image path, flexible sizes up to 4K-class outputs, high-fidelity edits | Transparent PNG sprites should use local chroma-key cleanup; true native alpha requires explicit `gpt-image-1.5` fallback |
 | `nanogen` | Google Gemini / Nano Banana image models | Rich style catalog, natural-language edits, multi-image composition, multi-turn refinement | No native alpha output; often returns JPEG and uses chromakey/post-processing for transparent-style assets |
 
-Use `nanogen` when you want the Gemini/Nano Banana editing workflow: style
-presets, natural-language regional edits, multi-image composition, and
-multi-turn refinement. Use `imagegen` when true transparent PNG/WebP output is
-the primary requirement.
+For sprite-sheet animation built on top of `imagegen2`, see
+[`anim8gen`](https://github.com/zeveck/anim8gen). For game audio, see
+[`audiogen`](https://github.com/zeveck/audiogen).
 
 ---
 
-## Getting started
+## Requirements
 
-1. **Install the skill.** Paste this into Claude Code (or any coding
-   agent) in your target repo:
-
-   ```
-   Install the nanogen skill from github.com/zeveck/nanogen.
-   ```
-
-2. **Add a Gemini API key** to `.env` at your repo root (get one at
-   <https://aistudio.google.com/app/apikey>):
-
-   ```
-   GEMINI_API_KEY=<paste-your-key>
-   ```
-
-3. **Talk to Claude Code:**
-
-   ```
-   /nanogen a cozy cabin in a snowy pine forest at dusk
-   ```
-
-That's it. The skill picks style, aspect, size, and output path from
-your request. Pass `--style`, `--aspect`, `--size`, or `--output`
-when you want to override.
+- Node.js 20.12+.
+- A Google Gemini API key (free at
+  <https://aistudio.google.com/app/apikey>). `GOOGLE_API_KEY` works as a
+  fallback.
 
 ---
 
 ## Gallery
 
-Every image below is paired with the `/nanogen` prompt that produced
-it. Type the prompt into Claude Code; the skill handles the rest.
+Every image below is paired with the `/nanogen` prompt that produced it.
+Type the prompt into Claude Code; the skill handles the rest.
+
+```
+/nanogen a misty Scottish highland cliff at sunrise overlooking the sea, dramatic cinematic concept art, 16:9
+```
+
+<img src="docs/images/highland-cliff.jpg" alt="misty Scottish highland cliff at sunrise" width="100%">
 
 ### Text-to-image
 
@@ -88,9 +66,8 @@ it. Type the prompt into Claude Code; the skill handles the rest.
 
 <img src="docs/images/knight.jpg" alt="photorealistic medieval knight in silver plate armor" width="33%">
 
-Short, casual prompts work too — the skill expands them. Below,
-"16-bit" routed to `--style pixel-16bit` and "large" upgraded the
-output to 2K automatically:
+Short, casual prompts work too — the skill picks style, aspect, and size
+from your phrasing:
 
 ```
 /nanogen A picture of a cute spider with fuzzy legs and eight eyes. 16-bit. large.
@@ -100,9 +77,8 @@ output to 2K automatically:
 
 ### Same prompt, three styles
 
-Add `--style <slug>` to steer the aesthetic. The catalog has 72
-presets across 10 categories; here's the same lighthouse in three of
-them:
+Add `--style <slug>` to steer the aesthetic. The catalog has 72 presets
+across 10 categories; here's the same lighthouse in three of them.
 
 ```
 /nanogen --style watercolor a solitary stone lighthouse on a rocky point, crashing waves at its base, an overcast sky, a single gull overhead
@@ -120,9 +96,7 @@ them:
 
 ### Readable text inside an image
 
-Quote the literal string you want rendered. Text-in-image is
-hit-or-miss at small sizes; the skill routes text-heavy prompts to
-Pro at 2K automatically.
+Quote the literal string you want rendered.
 
 ```
 /nanogen a vintage French coffee-shop chalkboard sign reading exactly "CAFÉ DU MATIN — OUVERT" in hand-drawn cursive chalk lettering
@@ -132,8 +106,8 @@ Pro at 2K automatically.
 
 ### Edit — change part of an image
 
-Point at an existing image and describe the change in plain English.
-No bitmap mask needed.
+Point at an existing image and describe the change in plain English. No
+bitmap mask needed.
 
 ```
 /nanogen --image apple.jpg change the apple to bright green
@@ -171,8 +145,8 @@ aesthetic is rewritten.
 
 ### Edit — amplify a user-supplied asset
 
-The frog on the left is a user-supplied sprite (not AI-generated).
-The frog on the right is what the skill returned:
+The frog on the left is a user-supplied sprite (not AI-generated). The
+frog on the right is what the skill returned.
 
 ```
 /nanogen --image frog-boss.png an even bigger and meaner version of this frog boss
@@ -184,7 +158,7 @@ The frog on the right is what the skill returned:
 
 ### Multi-image composition
 
-Pass up to 14 `--image` flags and Gemini composites them into one
+Pass multiple `--image` references and Gemini composites them into one
 scene. The first image is the primary reference.
 
 ```
@@ -197,9 +171,9 @@ scene. The first image is the primary reference.
 
 ### Multi-turn refinement
 
-Each follow-up `/nanogen` refines the prior image in place rather
-than regenerating from scratch. The skill spots the continuation
-automatically from its history log — you just keep talking:
+Each follow-up `/nanogen` refines the prior image in place rather than
+regenerating from scratch. The skill spots the continuation
+automatically — you just keep talking.
 
 ```
 /nanogen a single red apple on a white marble table
@@ -217,21 +191,100 @@ automatically from its history log — you just keep talking:
 
 ---
 
-## A couple of things to know
+## Install
 
-- **Gemini returns JPEG most of the time**, even when you ask for
-  `.png`. If you pass `--output foo.png` and the API returns JPEG,
-  the CLI saves it as `foo.jpg` and warns you. Pass `--output foo.jpg`
-  up front to silence the warning.
-- **Text rendered inside images is hit-or-miss.** For legible text,
-  the skill picks Pro at 2K with high thinking automatically — but
-  expect ~1 in 3 to mangle a letter.
+You can probably just **ask your agent**: "install the nanogen skill
+from `github.com/zeveck/nanogen` into this project." It will follow the
+manual steps below.
+
+To do it yourself, drop the skill files into `.claude/skills/nanogen/`:
+
+```bash
+mkdir -p .claude/skills/nanogen
+cd .claude/skills/nanogen
+for f in SKILL.md reference.md generate.cjs styles.json magicBytes.cjs; do
+  curl -O "https://raw.githubusercontent.com/zeveck/nanogen/main/.claude/skills/nanogen/$f"
+done
+```
+
+Confirm:
+
+```bash
+node .claude/skills/nanogen/generate.cjs --help
+```
+
+---
+
+## Configure
+
+```bash
+# Option A — export in your shell
+export GEMINI_API_KEY='...'
+
+# Option B — .env at project root (auto-loaded)
+echo 'GEMINI_API_KEY=...' > .env
+```
+
+Get a key at <https://aistudio.google.com/app/apikey>.
+
+---
+
+## Use
+
+### From Claude Code
+
+The slash command accepts natural language. The skill picks style,
+aspect, size, and output path from your phrasing.
+
+```
+/nanogen a cozy cabin in a snowy pine forest at dusk
+/nanogen --image apple.jpg change the apple to bright green
+/nanogen --image knight.jpg --style pixel-16bit convert to 16-bit pixel art
+/nanogen --image knight.jpg --image apple.jpg the knight holding the apple overhead
+```
+
+Override defaults with `--style`, `--aspect`, `--size`, or `--output`.
+Use `--region "<description>"` to scope an edit to part of an image.
+
+### From the shell
+
+`generate.cjs` is a self-contained Node CLI. Same flags, no agent
+required:
+
+```bash
+node .claude/skills/nanogen/generate.cjs \
+  --prompt "a cozy cabin in a snowy pine forest at dusk" \
+  --output assets/cabin.jpg
+
+node .claude/skills/nanogen/generate.cjs \
+  --prompt "change the apple to bright green" \
+  --image apple.jpg \
+  --output apple-green.jpg
+```
+
+`--dry-run` validates the request without an API call and reports
+whether a key would resolve.
+
+---
+
+## Good Fits
+
+- Concept art and reference imagery
+- Style exploration across 72 presets in 10 categories
+- Natural-language edits to existing images, including regional edits
+- Multi-image composition (up to 14 references per call)
+- Iterative refinement of a single image across turns
+
+Not a good fit for true transparent PNG sprites (use
+[`imagegen`](https://github.com/zeveck/imagegen) for native alpha) or
+sprite-sheet animation (see
+[`anim8gen`](https://github.com/zeveck/anim8gen)).
 
 ---
 
 ## Credits
 
-- Inspired by [zeveck/imagegen](https://github.com/zeveck/imagegen).
+- Shape and spirit borrowed from [zeveck/imagegen](https://github.com/zeveck/imagegen).
 - Uses [Google Gemini](https://ai.google.dev/gemini-api/docs/image-generation).
 - Built with [Claude Code](https://claude.com/claude-code).
 
