@@ -145,18 +145,31 @@ Rules for `<ext>` — important for Gemini's real output behavior:
 
 ### Model / aspect / size defaults
 
+Default model is **Flash** (`gemini-3.1-flash-image-preview`, alias
+`flash`) — $0.067 / 1K image. Pro (`--model pro`) costs 2× ($0.134) and
+produces a small visible quality gain on fluffy / vector / fringe-sensitive
+subjects; for most use cases Flash is fine. Users who want Pro everywhere
+can set `NANOGEN_MODEL=pro` in their `.env`. When asked "what models do I
+have?", run `nanogen --list-models` and report the approved set.
+
 | Asset type | Default model | Default aspect | Default size | Style category hints |
 |---|---|---|---|---|
-| Characters / sprites | `gemini-3.1-flash-image-preview` | 2:3 or 3:4 | 1K | `pixel-art`, `animation-cartoon`, `fine-art-historical` |
-| Tilesets / terrain | `gemini-3.1-flash-image-preview` | 1:1 | 1K | `pixel-art`, `painterly` |
-| Items / icons | `gemini-3.1-flash-image-preview` | 1:1 | 1K | `flat-vector`, `pixel-art` |
-| UI elements | `gemini-3.1-flash-image-preview` | varies | 1K | `flat-vector` |
-| Backgrounds / scenes | `gemini-3-pro-image-preview` | 16:9 or 21:9 | 2K | `painterly`, `photographic` |
-| Portraits | `gemini-3-pro-image-preview` | 2:3 or 3:4 | 2K | `painterly`, `photographic` |
-| Concept art | `gemini-3-pro-image-preview` | 16:9 | 2K | `painterly`, `drawing-ink` |
-| Diagrams / schematics | `gemini-3.1-flash-image-preview` | 16:9 | 1K | `design-technical` |
-| Text-heavy images (logos, posters) | `gemini-3-pro-image-preview` | varies | **2K minimum** | `design-technical` |
-| Effects | `gemini-3.1-flash-image-preview` | 1:1 | 1K | `speculative-niche`, `flat-vector` |
+| Characters / sprites | `flash` | 2:3 or 3:4 | 1K | `pixel-art`, `animation-cartoon`, `fine-art-historical` |
+| Tilesets / terrain | `flash` | 1:1 | 1K | `pixel-art`, `painterly` |
+| Items / icons | `flash` | 1:1 | 1K | `flat-vector`, `pixel-art` |
+| UI elements | `flash` | varies | 1K | `flat-vector` |
+| Backgrounds / scenes | `pro` | 16:9 or 21:9 | 2K | `painterly`, `photographic` |
+| Portraits | `pro` | 2:3 or 3:4 | 2K | `painterly`, `photographic` |
+| Concept art | `pro` | 16:9 | 2K | `painterly`, `drawing-ink` |
+| Diagrams / schematics | `flash` | 16:9 | 1K | `design-technical` |
+| Text-heavy images (logos, posters) | `pro` | varies | **2K minimum** | `design-technical` |
+| Effects | `flash` | 1:1 | 1K | `speculative-niche`, `flat-vector` |
+
+Pass aliases verbatim to `--model`: `--model pro` / `--model flash` /
+`--model flash-stable`. The CLI resolves to the full preview-model name.
+For one-off pinning, full names (`gemini-3.1-flash-image-preview` etc.)
+also work. Run `nanogen --list-models` to see all models the key approves
+and which alias each maps to.
 
 Text-in-image rendered below 2K is frequently garbled; if the user
 wants readable text in the image, default to 2K+ and
@@ -173,7 +186,85 @@ Map user intent → CLI action:
 | "make it bluer" / "adjust X" | `--history-continue <id>` + short delta prompt. |
 | "apply this style to my photo" | Edit mode: `--image <photo> --style <slug>`. |
 | "remove the background" / "change the sky" | Edit mode: `--image <src> --region "<description>"`. |
+| "I need it with a transparent background" / "sprite with alpha" | Add `--transparent` (text-to-image) and `--output …png`. Cannot combine with `--region`. |
 | "show me 3 variants" | Run the CLI 3× with different `--seed`. |
+
+### Transparent backgrounds
+
+**Detect transparency intent and engage `--transparent` automatically.**
+Users won't say "pass --transparent" — they'll signal it in natural
+language. Trigger words / phrases to watch for:
+
+- *transparent, alpha, alpha channel, no background, transparent background*
+- *sprite, icon, sticker, cutout, for compositing, for overlay*
+- *PNG with alpha, for use as a layer, isolate on transparent*
+
+When any of these appear in the user's request, invoke nanogen with
+`--transparent` and pick a `.png` output path. Don't make the user
+type the flag.
+
+The pipeline: Gemini has no native alpha, so nanogen instructs the
+model to paint a flat key-colored background and locally chroma-keys
+it out — JPEG-or-PNG response decoded, keyed, alpha-bled, and
+re-encoded as PNG. Output filename must end in `.png`.
+
+```bash
+nanogen --prompt "pixel-art sprite of a goblin warrior" \
+        --style pixel-16bit --transparent --output goblin.png
+```
+
+#### Pick the chroma key based on the subject
+
+The default `#ff00ff` (magenta) is the right answer most of the
+time. **Before running, look at the user's subject** and override
+when the subject would collide with magenta. Rule of thumb:
+
+| Subject contains a lot of… | Pick `--chroma-key` |
+|---|---|
+| (anything else) | `#ff00ff` magenta (default) |
+| pink, hot pink, fuchsia, deep red-violet | `#00ff00` green |
+| pure red dominating the frame | `#00ff00` green |
+| bright/saturated orange | `#00ffff` cyan |
+| green plants, leaves, foliage | `#ff00ff` magenta (default OK) |
+| sky blue, ocean | `#ff00ff` magenta (default OK) |
+
+The selection rule: pick a key color far from every prominent
+subject color (Euclidean RGB distance). Magenta works for
+everything except pinks/saturated-reds. Green works for everything
+except saturated greens and grass scenes. Cyan is the orange-
+specific escape hatch.
+
+#### Read the `chroma` block in the JSON to know if it worked
+
+The success JSON includes a `chroma` block with quality signals:
+
+- `qualityClass: "clean"` — ship it.
+- `qualityClass: "edge-spill"` — fringe likely from JPEG smear /
+  generation variance. **The CLI already auto-retried once** and
+  kept the better attempt; if it's still flagged, run the command
+  again (different seed) — most edge-spill clears on a second try.
+- `qualityClass: "subject-overlap"` — subject's colors overlap the
+  key family. Retry won't help. Either pick a different
+  `--chroma-key` (using the table above) or, if the subject is
+  light/fluffy/anti-aliased (kitten fur, dandelion fluff,
+  steam), accept that JPEG chroma-key has a resolution-dependent
+  fringe floor. Higher `--size 2K` halves the relative spill ring.
+- `retried: true` — a second attempt was made; `retryKept` says
+  which was used.
+
+#### Tuning knobs (use sparingly)
+
+- `--chroma-tolerance` (default 60) — empirically tuned against
+  Gemini JPEG output (the magenta key smears to ≈40 distance from
+  chroma subsampling). Setting this explicitly **disables
+  auto-expand** — tuners stay in control. Bump to 80 if you see
+  fringing; drop to 30–40 if saturated near-key subject colors
+  are being cut.
+- `--no-auto-retry` — skip the edge-spill retry. Saves one API
+  call when you don't care about cleanest output.
+- `E_CHROMA_NO_MATCH` → model painted no key. Retry; persistent →
+  raise `--chroma-tolerance` or change `--chroma-key`.
+- Not compatible with `--region` (`E_TRANSPARENT_REGION_CONFLICT`).
 
 History ids come from `.nanogen-history.jsonl` in the caller's cwd
 (one JSONL row per successful or refused invocation).
@@ -227,6 +318,16 @@ One-line recovery hints. Longer root-cause paragraphs live in
 | `E_UNKNOWN_FLAG` | Check the help output (`--help`) for valid flags. |
 | `E_UNKNOWN_STYLE` | Slug not in `styles.json`; see `reference.md` for the 72 slugs. |
 | `E_REGION_WITHOUT_IMAGE` | `--region` requires `--image`. |
+| `E_TRANSPARENT_REQUIRES_PNG` | `--transparent` requires `--output` ending in `.png`. |
+| `E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT` | `--chroma-key`/`--chroma-tolerance`/`--transparent-mode` need `--transparent`. |
+| `E_TRANSPARENT_REGION_CONFLICT` | Cannot combine `--transparent` with `--region`. |
+| `E_BAD_TRANSPARENT_MODE` | Only `chroma-key` is supported today. |
+| `E_BAD_CHROMA_KEY` | Use hex format like `#ff00ff`. |
+| `E_BAD_CHROMA_TOLERANCE` | Integer 0–442. |
+| `E_CHROMA_NO_MATCH` | Model painted no key color. Raise `--chroma-tolerance` or change `--chroma-key`. |
+| `E_CHROMA_BAD_PNG` / `E_CHROMA_BAD_JPEG` | Response bytes failed to decode — retry; persistent → file an issue. |
+| `E_CHROMA_TOO_LARGE` | Image exceeds 25M-pixel chroma-key limit. Drop `--size`. |
+| `E_CHROMA_UNSUPPORTED_MIME` | API returned a format chroma-key cannot transcode. Retry. |
 
 ### Env
 

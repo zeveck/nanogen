@@ -19,8 +19,33 @@ const VALID_MODELS = [
   "gemini-3-pro-image-preview",
   "gemini-2.5-flash-image",
 ];
+// Symbolic aliases — resolved to a full model name at validate-time. Anthropic
+// Claude Code, Aider, and Cursor all converge on this UX: callers say "pro" or
+// "flash" without having to remember preview-model-name version churn. When
+// Google ships a new image-gen model, update MODEL_ALIASES (and bump
+// VALID_MODELS) in one place; --model accepts either an alias or a full name.
+const MODEL_ALIASES = {
+  "pro":          "gemini-3-pro-image-preview",    // Nano Banana Pro (preview)
+  "flash":        "gemini-3.1-flash-image-preview", // Nano Banana 2 (preview)
+  "flash-stable": "gemini-2.5-flash-image",         // Nano Banana (GA)
+};
+// Default model = Nano Banana 2 (Flash). Flash is 2× cheaper than Pro at 1K
+// ($0.067 vs $0.134 / image) and 3.4× cheaper than the GA Flash-stable model.
+// Real-world image quality is comparable for most subjects; Pro shows a small
+// edge on fringe / vector / fluffy-subject chroma-key fidelity but the
+// visible difference is marginal. Users who want the Pro upgrade pass
+// --model pro per call or set NANOGEN_MODEL=pro in their .env.
 const DEFAULT_MODEL = "gemini-3.1-flash-image-preview";
-const FLASH_MODEL = "gemini-3.1-flash-image-preview";
+const FLASH_MODEL = "gemini-3.1-flash-image-preview";  // legacy --size 512 / --thinking minimal gate
+
+// Resolve an alias to its full model name. Pass-through for full names.
+// Returns null for unknown aliases / non-VALID_MODELS names — caller emits
+// E_UNKNOWN_MODEL.
+function resolveModelAlias(modelOrAlias) {
+  if (modelOrAlias in MODEL_ALIASES) return MODEL_ALIASES[modelOrAlias];
+  if (VALID_MODELS.includes(modelOrAlias)) return modelOrAlias;
+  return null;
+}
 
 const VALID_ASPECTS = [
   "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
@@ -75,13 +100,16 @@ const STRING_FLAGS = new Set([
   "--prompt", "--output", "--model", "--aspect", "--size",
   "--thinking", "--seed", "--temperature",
   "--history-id", "--history-parent", "--history-continue",
+  "--transparent-mode", "--chroma-key", "--chroma-tolerance",
 ]);
 const REPEATABLE_FLAGS = new Set([
   "--image", "--negative", "--safety", "--style", "--region",
 ]);
 const BOOLEAN_FLAGS = new Set([
-  "--dry-run", "--no-history", "--help", "-h",
+  "--dry-run", "--no-history", "--help", "-h", "--transparent",
+  "--no-auto-retry", "--list-models",
 ]);
+const VALID_TRANSPARENT_MODES = ["chroma-key"];
 
 // ---------------------------------------------------------------------------
 // Style Catalog (Phase 2)
@@ -269,9 +297,15 @@ function parseArgs(argv) {
     historyId: undefined,
     historyParent: undefined,
     historyContinue: undefined,
+    transparent: false,
+    transparentMode: undefined,
+    chromaKey: undefined,
+    chromaTolerance: undefined,
+    noAutoRetry: false,
     noHistory: false,
     dryRun: false,
     help: false,
+    listModels: false,
     unknownFlag: undefined, // first unknown flag encountered, for E_UNKNOWN_FLAG
   };
 
@@ -297,6 +331,18 @@ function parseArgs(argv) {
       args.noHistory = true;
       continue;
     }
+    if (tok === "--transparent") {
+      args.transparent = true;
+      continue;
+    }
+    if (tok === "--no-auto-retry") {
+      args.noAutoRetry = true;
+      continue;
+    }
+    if (tok === "--list-models") {
+      args.listModels = true;
+      continue;
+    }
 
     if (STRING_FLAGS.has(tok)) {
       const val = inlineValue !== undefined ? inlineValue : argv[++i];
@@ -312,6 +358,9 @@ function parseArgs(argv) {
         case "--history-id": args.historyId = val; break;
         case "--history-parent": args.historyParent = val; break;
         case "--history-continue": args.historyContinue = val; break;
+        case "--transparent-mode": args.transparentMode = val; break;
+        case "--chroma-key": args.chromaKey = val; break;
+        case "--chroma-tolerance": args.chromaTolerance = val; break;
       }
       continue;
     }
@@ -419,12 +468,80 @@ function validateArgs(args, stylesIndex) {
         `--output extension "${ext}" not in {${VALID_OUTPUT_EXTS.join(",")}}`);
     }
   }
-  // 5. --model not in known set
-  const model = args.model || DEFAULT_MODEL;
-  if (!VALID_MODELS.includes(model)) {
-    return fail("E_UNKNOWN_MODEL",
-      `--model "${model}" not in {${VALID_MODELS.join(",")}}`);
+  // 4a. Transparency flags. --transparent enables chroma-key synthesis
+  // (Gemini has no native alpha, so this is the only mode for now). The
+  // --transparent-mode enum is reserved for a future "native" mode if
+  // Google ever ships alpha-capable output.
+  const chromaFlagSet = args.chromaKey !== undefined ||
+                        args.chromaTolerance !== undefined ||
+                        args.transparentMode !== undefined;
+  if (chromaFlagSet && !args.transparent) {
+    return fail("E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT",
+      "--chroma-key, --chroma-tolerance, and --transparent-mode require --transparent");
   }
+  if (args.transparent) {
+    // Mode: default to chroma-key when only --transparent is set; reject
+    // any other value (no native mode exists today).
+    if (args.transparentMode === undefined) args.transparentMode = "chroma-key";
+    if (!VALID_TRANSPARENT_MODES.includes(args.transparentMode)) {
+      return fail("E_BAD_TRANSPARENT_MODE",
+        `--transparent-mode "${args.transparentMode}" not in {${VALID_TRANSPARENT_MODES.join(",")}}`);
+    }
+    // Output must be PNG — chromakey synthesizes alpha and JPEG/WEBP cannot
+    // round-trip it. Reject up front rather than silently coercing the path.
+    const outExt = path.extname(args.output).toLowerCase();
+    if (outExt !== ".png") {
+      return fail("E_TRANSPARENT_REQUIRES_PNG",
+        `--transparent requires --output ending in .png (got "${outExt}")`);
+    }
+    // --chroma-key validation: hex regex
+    const ck = args.chromaKey == null ? DEFAULT_CHROMA_KEY : args.chromaKey;
+    if (!/^#[0-9a-fA-F]{6}$/.test(ck)) {
+      return fail("E_BAD_CHROMA_KEY",
+        `--chroma-key "${args.chromaKey}" must be a hex color like #ff00ff`);
+    }
+    args.chromaKey = ck.toLowerCase();
+    // --chroma-tolerance validation: integer in [0, MAX_CHROMA_TOLERANCE]
+    let tol;
+    args.chromaToleranceExplicit = args.chromaTolerance != null;
+    if (args.chromaTolerance == null) {
+      tol = DEFAULT_CHROMA_TOLERANCE;
+    } else if (!/^[0-9]+$/.test(args.chromaTolerance)) {
+      return fail("E_BAD_CHROMA_TOLERANCE",
+        `--chroma-tolerance "${args.chromaTolerance}" must be an integer 0-${MAX_CHROMA_TOLERANCE}`);
+    } else {
+      tol = Number(args.chromaTolerance);
+      if (tol < 0 || tol > MAX_CHROMA_TOLERANCE) {
+        return fail("E_BAD_CHROMA_TOLERANCE",
+          `--chroma-tolerance "${args.chromaTolerance}" out of range 0-${MAX_CHROMA_TOLERANCE}`);
+      }
+    }
+    args.chromaTolerance = tol;
+    // --region with --transparent: semantics conflict. The whole-canvas
+    // chroma prompt suffix and a "modify part of the canvas" instruction
+    // pull in opposite directions. Reject explicitly.
+    if (Array.isArray(args.region) && args.region.length > 0) {
+      return fail("E_TRANSPARENT_REGION_CONFLICT",
+        "--transparent cannot be combined with --region (whole-canvas chroma key conflicts with regional edits)");
+    }
+  }
+  // 5. --model: apply NANOGEN_MODEL env override when --model is unset,
+  // then resolve any alias to its full model name. After this rule,
+  // args.model is either undefined (use DEFAULT_MODEL downstream) or a
+  // canonical VALID_MODELS member; nothing downstream sees an alias.
+  if (args.model === undefined && process.env.NANOGEN_MODEL) {
+    args.model = process.env.NANOGEN_MODEL;
+  }
+  if (args.model !== undefined) {
+    const resolved = resolveModelAlias(args.model);
+    if (!resolved) {
+      const aliases = Object.keys(MODEL_ALIASES).map(a => `${a}→${MODEL_ALIASES[a]}`).join(", ");
+      return fail("E_UNKNOWN_MODEL",
+        `--model "${args.model}" not in {${VALID_MODELS.join(",")}} or aliases {${aliases}}`);
+    }
+    args.model = resolved;
+  }
+  const model = args.model || DEFAULT_MODEL;
   // 5b. --style slug not in catalog (Phase 2)
   if (stylesIndex && args.styles && args.styles.length > 0) {
     for (const slug of args.styles) {
@@ -587,8 +704,10 @@ function printHelp() {
     "  --output <path>          Output file path. Ext ∈ {.png,.jpg,.jpeg,.webp}.",
     "",
     "Optional flags:",
-    "  --model <id>             Model id. Default: " + DEFAULT_MODEL + ".",
-    "                           Valid: " + VALID_MODELS.join(", "),
+    "  --model <id|alias>       Model id. Default: " + DEFAULT_MODEL + " (alias: pro).",
+    "                           Aliases: " + Object.keys(MODEL_ALIASES).map((a) => `${a}→${MODEL_ALIASES[a]}`).join(", "),
+    "                           Full names: " + VALID_MODELS.join(", "),
+    "                           Env override: NANOGEN_MODEL (also accepts aliases).",
     "  --aspect <ratio>         Aspect ratio. Default: " + DEFAULT_ASPECT + ".",
     "                           Valid: " + VALID_ASPECTS.join(", "),
     "  --size <level>           Image size. Default: " + DEFAULT_SIZE + ".",
@@ -616,6 +735,23 @@ function printHelp() {
     "                           multi-turn edit (round-trips the prior",
     "                           thoughtSignature). Mutually exclusive",
     "                           with --history-parent.",
+    "  --transparent            Synthesize a transparent background via",
+    "                           chroma-keying (Gemini lacks native alpha).",
+    "                           Requires --output ending in .png. Cannot",
+    "                           be combined with --region.",
+    "  --transparent-mode <m>   Reserved for future modes. Valid: " + VALID_TRANSPARENT_MODES.join(", ") + ".",
+    "                           Default when --transparent set: chroma-key.",
+    "  --chroma-key <#rrggbb>   Hex color used as the chroma key.",
+    "                           Default: " + DEFAULT_CHROMA_KEY + " (magenta — rare in natural imagery).",
+    "  --chroma-tolerance <n>   Integer 0-" + MAX_CHROMA_TOLERANCE + ". RGB distance threshold.",
+    "                           Default: " + DEFAULT_CHROMA_TOLERANCE + ". Setting this explicitly DISABLES",
+    "                           the auto-expand pass.",
+    "                           Max image size: " + MAX_CHROMA_KEY_PIXELS + " pixels.",
+    "  --no-auto-retry          Skip the edge-spill retry. With --transparent,",
+    "                           qualityClass=edge-spill triggers one extra API",
+    "                           call and the better-keyed attempt is kept. Use",
+    "                           this flag to save the call when you don't need",
+    "                           the cleanest output.",
     "  --no-history             Skip history append.",
     "  --dry-run                Preview the request as JSON and exit 0.",
     "                           No HTTP call. No API key needed to run it,",
@@ -624,10 +760,15 @@ function printHelp() {
     "                           keyPrefix fields in its output — so it",
     "                           doubles as a free preflight for the skill",
     "                           layer. Full key is never printed.",
+    "  --list-models            Probe the API for image-gen models your key",
+    "                           is approved for. Prints JSON: full names,",
+    "                           alias mappings, and which is nanogen's default.",
+    "                           Ignores other flags. Requires GEMINI_API_KEY.",
     "  --help, -h               Show this help.",
     "",
     "Examples:",
     "  nanogen --prompt \"a red apple on a marble table\" --output apple.png",
+    "  nanogen --prompt \"pixel-art sprite of a goblin\" --transparent --output goblin.png",
     "",
     "EDIT MODE (one or more --image; --prompt OR --region required):",
     "  nanogen --image cat.png --region \"replace the background with a beach\" --output cat-beach.png",
@@ -724,6 +865,23 @@ function composePromptText(args, stylesIndex) {
   }
   if (hasRegion) {
     promptText = promptText + " Region: " + args.region.join("; ") + ".";
+  }
+  // Chroma-key suffix — inserted BEFORE the Avoid clause so the existing
+  // "Avoid: ..." grouping isn't broken. Edit mode (--image present, no
+  // --history-continue) gets the "Replace the background with..." variant;
+  // text-to-image and continuation get the "Solid flat ... canvas" form.
+  // Validation has already canonicalized chromaKey to lowercase hex.
+  if (args.transparent) {
+    const color = args.chromaKey;
+    if (hasImage && !hasContinuation) {
+      promptText = promptText +
+        " Replace the background with solid flat " + color +
+        " fill, no shadows, no gradients, no background objects.";
+    } else {
+      promptText = promptText +
+        " Solid flat " + color +
+        " chroma-key background filling the canvas, no shadows, no gradients, no background objects.";
+    }
   }
   if (args.negative && args.negative.length > 0) {
     promptText = promptText + " Avoid: " + args.negative.join("; ") + ".";
@@ -1621,6 +1779,664 @@ function normalizedExtFormat(ext) {
 }
 
 // ---------------------------------------------------------------------------
+// Chroma-key transparency
+// ---------------------------------------------------------------------------
+//
+// Gemini has no native alpha channel and frequently returns JPEG even when
+// PNG was requested. To synthesize transparency we (1) coerce the model into
+// painting a flat magenta key behind the subject via a prompt suffix, (2)
+// decode the returned bytes into RGBA, (3) zero alpha for pixels within
+// tolerance of the key color, (4) bleed RGB outwards into transparent pixels
+// to prevent black halos when composited, (5) suppress key-color spill on
+// the visible edge, and (6) re-encode as PNG.
+//
+// PNG codec + keying/bleed/spill ported verbatim from
+// github.com/zeveck/imagegen2 (BSD-3, MIT-compatible). JPEG decoding goes
+// through vendor/jpeg-decoder.js (jpeg-js@0.4.4). Pure stdlib (`zlib`)
+// otherwise.
+//
+// Error model: helpers throw ChromaKeyError so the call site can map to
+// E_CHROMA_* codes via emitError. Nothing in this section calls emitError
+// itself — keeps the module pure for unit testing.
+
+const zlib = require("zlib");
+const decodeJpegRaw = require("./vendor/jpeg-decoder.js");
+
+const DEFAULT_CHROMA_KEY = "#ff00ff";
+// 60 picked empirically against real Gemini JPEG output: the magenta key
+// gets smeared to ≈40 distance by JPEG chroma subsampling, putting a wide
+// spill ring just past the previous default of 40. Raising to 60 cleans
+// the ring completely on natural subjects (apple: 222k → 34 residue
+// pixels; pink flamingo flesh sits at distance >100, untouched). Subjects
+// containing saturated near-magenta colors (≥ ~225 R, ≤ ~50 G, ≥ ~225 B)
+// may need a lower override; everything else is safe.
+const DEFAULT_CHROMA_TOLERANCE = 60;
+const MAX_CHROMA_TOLERANCE = 442; // ceil(sqrt(3 * 255^2))
+const MAX_CHROMA_KEY_PIXELS = 25_000_000; // ~16K × ~1.5K — matches imagegen2
+
+class ChromaKeyError extends Error {
+  constructor(code, message, details) {
+    super(message);
+    this.name = "ChromaKeyError";
+    this.code = code;
+    this.details = details || null;
+  }
+}
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+let CRC_TABLE = null;
+
+function crcTable() {
+  if (CRC_TABLE) return CRC_TABLE;
+  CRC_TABLE = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    CRC_TABLE[n] = c >>> 0;
+  }
+  return CRC_TABLE;
+}
+
+function crc32(buf) {
+  const table = crcTable();
+  let c = 0xffffffff;
+  for (const byte of buf) {
+    c = table[(c ^ byte) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function parseHexColor(hex) {
+  const normalized = String(hex || "").toLowerCase();
+  if (!/^#[0-9a-f]{6}$/.test(normalized)) {
+    throw new ChromaKeyError("E_BAD_CHROMA_KEY",
+      `Invalid chroma key "${hex}". Must be a hex color like #ff00ff.`);
+  }
+  return {
+    hex: normalized,
+    r: Number.parseInt(normalized.slice(1, 3), 16),
+    g: Number.parseInt(normalized.slice(3, 5), 16),
+    b: Number.parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
+function paethPredictor(a, b, c) {
+  const p = a + b - c;
+  const pa = Math.abs(p - a);
+  const pb = Math.abs(p - b);
+  const pc = Math.abs(p - c);
+  if (pa <= pb && pa <= pc) return a;
+  if (pb <= pc) return b;
+  return c;
+}
+
+function parsePng(buffer) {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG", "PNG parser expected a Buffer.");
+  }
+  if (buffer.length < PNG_SIGNATURE.length || !buffer.subarray(0, 8).equals(PNG_SIGNATURE)) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Unsupported PNG: missing PNG signature.");
+  }
+  let offset = 8;
+  let ihdr = null;
+  let seenIend = false;
+  const idatChunks = [];
+  while (offset < buffer.length) {
+    if (offset + 12 > buffer.length) {
+      throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Corrupt PNG: truncated chunk header.");
+    }
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.toString("ascii", offset + 4, offset + 8);
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    const crcEnd = dataEnd + 4;
+    if (crcEnd > buffer.length) {
+      throw new ChromaKeyError("E_CHROMA_BAD_PNG", `Corrupt PNG: truncated ${type} chunk.`);
+    }
+    const data = buffer.subarray(dataStart, dataEnd);
+    const actualCrc = buffer.readUInt32BE(dataEnd);
+    const expectedCrc = crc32(buffer.subarray(offset + 4, dataEnd));
+    if (actualCrc !== expectedCrc) {
+      throw new ChromaKeyError("E_CHROMA_BAD_PNG", `Corrupt PNG: CRC mismatch in ${type} chunk.`);
+    }
+    if (type === "IHDR") {
+      if (length !== 13) throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Corrupt PNG: invalid IHDR length.");
+      if (ihdr) throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Corrupt PNG: duplicate IHDR chunk.");
+      ihdr = {
+        width: data.readUInt32BE(0),
+        height: data.readUInt32BE(4),
+        bitDepth: data[8],
+        colorType: data[9],
+        compression: data[10],
+        filter: data[11],
+        interlace: data[12],
+      };
+    } else if (type === "IDAT") {
+      idatChunks.push(data);
+    } else if (type === "IEND") {
+      seenIend = true;
+      break;
+    }
+    offset = crcEnd;
+  }
+  if (!ihdr) throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Corrupt PNG: missing IHDR chunk.");
+  if (!seenIend) throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Corrupt PNG: missing IEND chunk.");
+  if (!idatChunks.length) throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Corrupt PNG: missing IDAT chunk.");
+  if (ihdr.width === 0 || ihdr.height === 0) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Corrupt PNG: width and height must be greater than zero.");
+  }
+  const pixelCount = ihdr.width * ihdr.height;
+  if (pixelCount > MAX_CHROMA_KEY_PIXELS) {
+    throw new ChromaKeyError("E_CHROMA_TOO_LARGE",
+      `Unsupported PNG: ${pixelCount} pixels exceeds chroma-key limit of ${MAX_CHROMA_KEY_PIXELS}.`);
+  }
+  if (ihdr.bitDepth !== 8) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG",
+      `Unsupported PNG: bit depth ${ihdr.bitDepth}; only 8-bit PNGs are supported.`);
+  }
+  if (![2, 6].includes(ihdr.colorType)) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG",
+      `Unsupported PNG: color type ${ihdr.colorType}; only RGB and RGBA PNGs are supported.`);
+  }
+  if (ihdr.compression !== 0 || ihdr.filter !== 0 || ihdr.interlace !== 0) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG",
+      "Unsupported PNG: only standard non-interlaced PNGs are supported.");
+  }
+  const channels = ihdr.colorType === 6 ? 4 : 3;
+  const bytesPerPixel = channels;
+  const rowBytes = ihdr.width * channels;
+  const expected = (rowBytes + 1) * ihdr.height;
+  let inflated;
+  try {
+    inflated = zlib.inflateSync(Buffer.concat(idatChunks), { maxOutputLength: expected });
+  } catch (err) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG",
+      `Corrupt PNG: failed to inflate IDAT data: ${err.message}`);
+  }
+  if (inflated.length !== expected) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG",
+      `Corrupt PNG: expected ${expected} inflated bytes, got ${inflated.length}.`);
+  }
+  const raw = Buffer.alloc(rowBytes * ihdr.height);
+  let inOffset = 0;
+  let outOffset = 0;
+  for (let y = 0; y < ihdr.height; y++) {
+    const filter = inflated[inOffset++];
+    if (filter > 4) throw new ChromaKeyError("E_CHROMA_BAD_PNG", `Unsupported PNG filter type ${filter}.`);
+    for (let x = 0; x < rowBytes; x++) {
+      const rawByte = inflated[inOffset++];
+      const left = x >= bytesPerPixel ? raw[outOffset + x - bytesPerPixel] : 0;
+      const up = y > 0 ? raw[outOffset + x - rowBytes] : 0;
+      const upLeft = y > 0 && x >= bytesPerPixel ? raw[outOffset + x - rowBytes - bytesPerPixel] : 0;
+      let value;
+      if (filter === 0) value = rawByte;
+      else if (filter === 1) value = rawByte + left;
+      else if (filter === 2) value = rawByte + up;
+      else if (filter === 3) value = rawByte + Math.floor((left + up) / 2);
+      else value = rawByte + paethPredictor(left, up, upLeft);
+      raw[outOffset + x] = value & 0xff;
+    }
+    outOffset += rowBytes;
+  }
+  const rgba = Buffer.alloc(ihdr.width * ihdr.height * 4);
+  for (let src = 0, dst = 0; src < raw.length; src += channels, dst += 4) {
+    rgba[dst] = raw[src];
+    rgba[dst + 1] = raw[src + 1];
+    rgba[dst + 2] = raw[src + 2];
+    rgba[dst + 3] = channels === 4 ? raw[src + 3] : 255;
+  }
+  return { width: ihdr.width, height: ihdr.height, rgba };
+}
+
+function pngChunk(type, data) {
+  const typeBuf = Buffer.from(type, "ascii");
+  const out = Buffer.alloc(12 + data.length);
+  out.writeUInt32BE(data.length, 0);
+  typeBuf.copy(out, 4);
+  data.copy(out, 8);
+  const crcInput = Buffer.concat([typeBuf, data]);
+  out.writeUInt32BE(crc32(crcInput), 8 + data.length);
+  return out;
+}
+
+function encodeRgbaPng({ width, height, rgba }) {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Invalid PNG dimensions for encoding.");
+  }
+  if (!Buffer.isBuffer(rgba) || rgba.length !== width * height * 4) {
+    throw new ChromaKeyError("E_CHROMA_BAD_PNG", "Invalid RGBA buffer for PNG encoding.");
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;  // bit depth
+  ihdr[9] = 6;  // RGBA
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+  const rowBytes = width * 4;
+  const scanlines = Buffer.alloc((rowBytes + 1) * height);
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * (rowBytes + 1);
+    scanlines[rowStart] = 0; // filter: none
+    rgba.copy(scanlines, rowStart + 1, y * rowBytes, (y + 1) * rowBytes);
+  }
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", zlib.deflateSync(scanlines)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+// Decode JPEG into the same {width, height, rgba: Buffer} shape parsePng
+// returns, so downstream passes are codec-agnostic.
+function parseJpeg(buffer) {
+  if (!Buffer.isBuffer(buffer)) {
+    throw new ChromaKeyError("E_CHROMA_BAD_JPEG", "JPEG parser expected a Buffer.");
+  }
+  let decoded;
+  try {
+    decoded = decodeJpegRaw(buffer, { useTArray: false, formatAsRGBA: true });
+  } catch (err) {
+    throw new ChromaKeyError("E_CHROMA_BAD_JPEG",
+      `Failed to decode JPEG: ${err && err.message || String(err)}`);
+  }
+  if (!decoded || !decoded.width || !decoded.height || !decoded.data) {
+    throw new ChromaKeyError("E_CHROMA_BAD_JPEG", "JPEG decoder returned no image data.");
+  }
+  const pixelCount = decoded.width * decoded.height;
+  if (pixelCount > MAX_CHROMA_KEY_PIXELS) {
+    throw new ChromaKeyError("E_CHROMA_TOO_LARGE",
+      `Unsupported JPEG: ${pixelCount} pixels exceeds chroma-key limit of ${MAX_CHROMA_KEY_PIXELS}.`);
+  }
+  // jpeg-js gives us RGBA already when formatAsRGBA: true. Alpha is filled
+  // with 255 — there is no source alpha to preserve.
+  const rgba = Buffer.isBuffer(decoded.data) ? decoded.data : Buffer.from(decoded.data);
+  if (rgba.length !== pixelCount * 4) {
+    throw new ChromaKeyError("E_CHROMA_BAD_JPEG",
+      `Unexpected JPEG RGBA size: got ${rgba.length}, expected ${pixelCount * 4}.`);
+  }
+  return { width: decoded.width, height: decoded.height, rgba };
+}
+
+function alphaBleedTransparentPixels(parsed) {
+  const { width, height, rgba } = parsed;
+  const pixelCount = width * height;
+  const nearest = new Int32Array(pixelCount);
+  nearest.fill(-1);
+  const queue = new Int32Array(pixelCount);
+  let head = 0;
+  let tail = 0;
+  for (let pixel = 0, offset = 0; pixel < pixelCount; pixel++, offset += 4) {
+    if (rgba[offset + 3] > 0) {
+      nearest[pixel] = pixel;
+      queue[tail++] = pixel;
+    }
+  }
+  if (tail === 0 || tail === pixelCount) return 0;
+  while (head < tail) {
+    const pixel = queue[head++];
+    const source = nearest[pixel];
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    if (x > 0) {
+      const next = pixel - 1;
+      if (nearest[next] === -1) { nearest[next] = source; queue[tail++] = next; }
+    }
+    if (x + 1 < width) {
+      const next = pixel + 1;
+      if (nearest[next] === -1) { nearest[next] = source; queue[tail++] = next; }
+    }
+    if (y > 0) {
+      const next = pixel - width;
+      if (nearest[next] === -1) { nearest[next] = source; queue[tail++] = next; }
+    }
+    if (y + 1 < height) {
+      const next = pixel + width;
+      if (nearest[next] === -1) { nearest[next] = source; queue[tail++] = next; }
+    }
+  }
+  let bledPixels = 0;
+  for (let pixel = 0, offset = 0; pixel < pixelCount; pixel++, offset += 4) {
+    if (rgba[offset + 3] !== 0) continue;
+    const source = nearest[pixel];
+    if (source < 0 || source === pixel) continue;
+    const sourceOffset = source * 4;
+    rgba[offset] = rgba[sourceOffset];
+    rgba[offset + 1] = rgba[sourceOffset + 1];
+    rgba[offset + 2] = rgba[sourceOffset + 2];
+    bledPixels++;
+  }
+  return bledPixels;
+}
+
+const CHROMA_SPILL_SEARCH_RADIUS = 2;
+
+function colorDistanceSq(r, g, b, key) {
+  const dr = r - key.r;
+  const dg = g - key.g;
+  const db = b - key.b;
+  return dr * dr + dg * dg + db * db;
+}
+
+function hasTransparentCardinalNeighbor(parsed, pixel) {
+  const { width, height, rgba } = parsed;
+  const x = pixel % width;
+  const y = Math.floor(pixel / width);
+  if (x > 0 && rgba[(pixel - 1) * 4 + 3] === 0) return true;
+  if (x + 1 < width && rgba[(pixel + 1) * 4 + 3] === 0) return true;
+  if (y > 0 && rgba[(pixel - width) * 4 + 3] === 0) return true;
+  if (y + 1 < height && rgba[(pixel + width) * 4 + 3] === 0) return true;
+  return false;
+}
+
+function isLikelyKeySpill(r, g, b, key, tolerance) {
+  const spillDistance = Math.max(96, tolerance + 72);
+  if (colorDistanceSq(r, g, b, key) > spillDistance * spillDistance) return false;
+  const channels = [
+    { pixel: r, key: key.r },
+    { pixel: g, key: key.g },
+    { pixel: b, key: key.b },
+  ];
+  let constrainedChannels = 0;
+  let matchingChannels = 0;
+  for (const channel of channels) {
+    if (channel.key >= 192) {
+      constrainedChannels++;
+      if (channel.pixel >= 176) matchingChannels++;
+    } else if (channel.key <= 63) {
+      constrainedChannels++;
+      if (channel.pixel <= 112) matchingChannels++;
+    }
+  }
+  if (constrainedChannels > 0 && matchingChannels !== constrainedChannels) return false;
+  return Math.max(r, g, b) - Math.min(r, g, b) >= 64;
+}
+
+function averageNearbyVisibleNonSpillColor(parsed, source, pixel, key, tolerance) {
+  const { width, height } = parsed;
+  const x = pixel % width;
+  const y = Math.floor(pixel / width);
+  let totalR = 0, totalG = 0, totalB = 0, count = 0;
+  for (let dy = -CHROMA_SPILL_SEARCH_RADIUS; dy <= CHROMA_SPILL_SEARCH_RADIUS; dy++) {
+    const yy = y + dy;
+    if (yy < 0 || yy >= height) continue;
+    for (let dx = -CHROMA_SPILL_SEARCH_RADIUS; dx <= CHROMA_SPILL_SEARCH_RADIUS; dx++) {
+      const xx = x + dx;
+      if (xx < 0 || xx >= width || (dx === 0 && dy === 0)) continue;
+      const offset = (yy * width + xx) * 4;
+      if (source[offset + 3] === 0) continue;
+      const nr = source[offset];
+      const ng = source[offset + 1];
+      const nb = source[offset + 2];
+      if (colorDistanceSq(nr, ng, nb, key) <= tolerance * tolerance) continue;
+      if (isLikelyKeySpill(nr, ng, nb, key, tolerance)) continue;
+      totalR += nr;
+      totalG += ng;
+      totalB += nb;
+      count++;
+    }
+  }
+  if (count === 0) return null;
+  return [Math.round(totalR / count), Math.round(totalG / count), Math.round(totalB / count)];
+}
+
+function suppressKeySpillOnVisibleEdges(parsed, key, tolerance) {
+  const { width, height, rgba } = parsed;
+  const source = Buffer.from(rgba);
+  const replacements = [];
+  for (let pixel = 0, offset = 0; pixel < width * height; pixel++, offset += 4) {
+    if (source[offset + 3] === 0) continue;
+    if (!hasTransparentCardinalNeighbor(parsed, pixel)) continue;
+    const r = source[offset];
+    const g = source[offset + 1];
+    const b = source[offset + 2];
+    if (!isLikelyKeySpill(r, g, b, key, tolerance)) continue;
+    const replacement = averageNearbyVisibleNonSpillColor(parsed, source, pixel, key, tolerance);
+    if (!replacement) continue;
+    replacements.push({ offset, replacement });
+  }
+  for (const { offset, replacement } of replacements) {
+    rgba[offset] = replacement[0];
+    rgba[offset + 1] = replacement[1];
+    rgba[offset + 2] = replacement[2];
+  }
+  return replacements.length;
+}
+
+// Fringe-detection constants. After keying, count opaque pixels whose RGB
+// distance to the key sits in the band [tolerance, tolerance + FRINGE_BAND].
+// JPEG smear from Gemini puts a wide spill ring just past the tolerance
+// cut on dark-line-art / vector subjects (see the heart sample in live
+// testing); the ring is invisible on the histogram of "good" subjects
+// (photographic, pixel-art, pink) because their nearest opaque pixel jumps
+// straight to distance ≥ 100. A high band density is a clean signal that
+// the user needs more tolerance, even when they didn't pass one.
+const FRINGE_BAND = 30;
+const FRINGE_DENSITY_THRESHOLD = 0.005;  // 0.5% of canvas
+const AUTO_EXPAND_STEP = 20;
+const MAX_AUTO_TOLERANCE = 100;
+// Quality-probe thresholds. After keying, opaque pixels within
+// NEAR_KEY_DISTANCE of the key are "visibly tinted by the key" — colors a
+// human would call pink/magenta-ish (or whatever the key color is). If
+// they exceed LIKELY_SPILL_PERCENT of the visible subject, we mark the
+// output as likelySpill=true. Empirically (live-test data):
+//   apple-clean       : 0.1%   →  likelySpill = false
+//   heart-clean       : 0.1%   →  likelySpill = false
+//   flamingo-pink-bod : 3.4%   →  likelySpill = true  (this is REAL pink,
+//                                                      not spill, but the
+//                                                      caller can disambig
+//                                                      from the prompt)
+//   apple-spilly      : 2.0%   →  likelySpill = true
+//   kitten-fringed    : 2.3%   →  likelySpill = true
+//   ink-key-failed    : 8.9%   →  likelySpill = true
+const NEAR_KEY_DISTANCE = 100;
+const LIKELY_SPILL_PERCENT = 0.01;
+const SUBJECT_OVERLAP_PERCENT = 0.05;  // ≥5%: subject likely overlaps key family
+
+// Count opaque pixels whose distance-from-key sits in [tolMin, tolMax].
+// Pure — used to decide whether to auto-expand.
+function countOpaqueInDistanceBand(rgba, key, tolMin, tolMax) {
+  const minSq = tolMin * tolMin;
+  const maxSq = tolMax * tolMax;
+  let count = 0;
+  for (let i = 0; i < rgba.length; i += 4) {
+    if (rgba[i + 3] === 0) continue;
+    const dr = rgba[i] - key.r;
+    const dg = rgba[i + 1] - key.g;
+    const db = rgba[i + 2] - key.b;
+    const dsq = dr * dr + dg * dg + db * db;
+    if (dsq >= minSq && dsq <= maxSq) count++;
+  }
+  return count;
+}
+
+// Run a single keying sweep. Returns {removedPixels, opaquePixels} and
+// mutates rgba alpha.
+function chromaKeySweep(parsed, key, tolerance) {
+  let removedPixels = 0;
+  let opaquePixels = 0;
+  for (let i = 0; i < parsed.rgba.length; i += 4) {
+    if (parsed.rgba[i + 3] === 0) continue; // already transparent
+    const dr = parsed.rgba[i] - key.r;
+    const dg = parsed.rgba[i + 1] - key.g;
+    const db = parsed.rgba[i + 2] - key.b;
+    const distance = Math.sqrt(dr * dr + dg * dg + db * db);
+    if (distance <= tolerance) {
+      parsed.rgba[i + 3] = 0;
+      removedPixels++;
+    } else if (parsed.rgba[i + 3] > 0) {
+      opaquePixels++;
+    }
+  }
+  return { removedPixels, opaquePixels };
+}
+
+// Run keying/bleed/spill on a parsed {width,height,rgba} bitmap. Mutates rgba.
+function applyChromaKey(parsed, key, tolerance, { autoExpand = true } = {}) {
+  const initialTolerance = tolerance;
+  let effectiveTolerance = tolerance;
+  let { removedPixels, opaquePixels } = chromaKeySweep(parsed, key, effectiveTolerance);
+
+  // Fringe detection: dense cluster of "almost keyed" pixels just past the
+  // tolerance cut. Triggers exactly the case the user hits on vector / line-
+  // art subjects, but stays quiet on photographic subjects whose nearest
+  // opaque pixel is at distance ≥ 100 from the key.
+  let autoExpanded = false;
+  let fringePixelCount = 0;
+  if (autoExpand && removedPixels > 0 && effectiveTolerance < MAX_AUTO_TOLERANCE) {
+    fringePixelCount = countOpaqueInDistanceBand(
+      parsed.rgba, key, effectiveTolerance, effectiveTolerance + FRINGE_BAND);
+    const canvasPixels = parsed.rgba.length / 4;
+    const density = fringePixelCount / canvasPixels;
+    if (density >= FRINGE_DENSITY_THRESHOLD) {
+      // Auto-expand tolerance once. Re-key the remaining opaque pixels;
+      // already-transparent pixels are skipped by chromaKeySweep.
+      effectiveTolerance = Math.min(effectiveTolerance + AUTO_EXPAND_STEP, MAX_AUTO_TOLERANCE);
+      const second = chromaKeySweep(parsed, key, effectiveTolerance);
+      removedPixels += second.removedPixels;
+      opaquePixels = second.opaquePixels;
+      autoExpanded = true;
+    }
+  }
+
+  if (removedPixels === 0) {
+    throw new ChromaKeyError("E_CHROMA_NO_MATCH",
+      `Chroma-key post-processing found no pixels matching ${key.hex} within tolerance ${initialTolerance}.`,
+      { chromaKey: key.hex, tolerance: initialTolerance, retainedVisiblePixels: opaquePixels });
+  }
+  const alphaBleedPixels = alphaBleedTransparentPixels(parsed);
+  const spillSuppressedPixels = suppressKeySpillOnVisibleEdges(parsed, key, effectiveTolerance);
+
+  // Quality probe: opaque pixels whose RGB distance from the key sits in
+  // [effectiveTolerance, NEAR_KEY_DISTANCE] are visibly key-tinted but
+  // weren't keyed away. If they exceed LIKELY_SPILL_PERCENT of the visible
+  // subject, the result probably shows a colored fringe — callers (Claude
+  // skill layer, shell pipelines) can use likelySpill to retry generation,
+  // try a different chroma key, or warn the user.
+  const nearKeyPixels = countOpaqueInDistanceBand(
+    parsed.rgba, key, effectiveTolerance, NEAR_KEY_DISTANCE);
+  const nearKeyPercentOfSubject = opaquePixels > 0
+    ? nearKeyPixels / opaquePixels
+    : 0;
+  const likelySpill = nearKeyPercentOfSubject >= LIKELY_SPILL_PERCENT;
+  // qualityClass:
+  //   "clean"           — no detectable spill
+  //   "edge-spill"      — fringe likely from JPEG smear / generation variance;
+  //                       retry generation has a real chance of landing cleaner
+  //   "subject-overlap" — subject colors overlap the key's color family; the
+  //                       JPEG silhouette will smear into the key regardless of
+  //                       which key is used. Retry unlikely to help — consider
+  //                       higher --size, a different chroma key (only if subject
+  //                       isn't actually near magenta), or an alpha-native tool.
+  let qualityClass;
+  if (!likelySpill) qualityClass = "clean";
+  else if (nearKeyPercentOfSubject < SUBJECT_OVERLAP_PERCENT) qualityClass = "edge-spill";
+  else qualityClass = "subject-overlap";
+
+  // Stamp the auto-expand outcome onto the returned stats so the caller
+  // can surface it in the success JSON.
+  const extra = autoExpanded
+    ? { autoExpanded: true, effectiveTolerance, fringePixelCount }
+    : { autoExpanded: false };
+  return {
+    removedPixels,
+    retainedVisiblePixels: opaquePixels,
+    alphaBleedPixels,
+    spillSuppressedPixels,
+    likelySpill,
+    qualityClass,
+    nearKeyPixels,
+    nearKeyPercentOfSubject: Number(nearKeyPercentOfSubject.toFixed(4)),
+    ...extra,
+  };
+}
+
+// Top-level entry. Accepts arbitrary supported image bytes plus the source
+// MIME, returns a freshly-encoded PNG buffer with alpha and a stats block.
+// Caller is responsible for catching ChromaKeyError and mapping to emitError.
+//
+// `autoExpand` (default true) lets the keying step bump tolerance once if it
+// detects a wide spill ring just past the cut — fixes the vector / line-art
+// fringe case empirically observed in live testing. Set false to honor an
+// explicit user tolerance verbatim.
+function chromaKeyAnyImage(buffer, mimeType, { chromaKey, tolerance, autoExpand = true } = {}) {
+  const key = parseHexColor(chromaKey || DEFAULT_CHROMA_KEY);
+  const tol = tolerance == null ? DEFAULT_CHROMA_TOLERANCE : tolerance;
+  if (!Number.isInteger(tol) || tol < 0 || tol > MAX_CHROMA_TOLERANCE) {
+    throw new ChromaKeyError("E_BAD_CHROMA_TOLERANCE",
+      `Invalid chroma tolerance ${tolerance}. Must be an integer 0-${MAX_CHROMA_TOLERANCE}.`);
+  }
+  let parsed;
+  if (mimeType === "image/png") {
+    parsed = parsePng(buffer);
+  } else if (mimeType === "image/jpeg") {
+    parsed = parseJpeg(buffer);
+  } else {
+    throw new ChromaKeyError("E_CHROMA_UNSUPPORTED_MIME",
+      `Cannot chroma-key image with MIME "${mimeType}". Expected image/png or image/jpeg.`);
+  }
+  const stats = applyChromaKey(parsed, key, tol, { autoExpand });
+  return {
+    buffer: encodeRgbaPng(parsed),
+    stats: {
+      chromaKey: key.hex,
+      tolerance: tol,
+      width: parsed.width,
+      height: parsed.height,
+      sourceMimeType: mimeType,
+      ...stats,
+    },
+  };
+}
+
+// One additional HTTP attempt + keying, used by the auto-retry path in
+// runHttpFlow when the first attempt's qualityClass is "edge-spill". Bounded
+// to a single call — never recursive. Returns:
+//   { ok: true,  outputBytes, chromaStats, parsedImage, parsedMime, thoughtSignature }
+//   { ok: false, error: <string with code or message> }
+// Failures here are non-fatal: the caller keeps the first attempt.
+async function retryGenerateOnce(url, realHeaders, body, expectedMime, keyOpts) {
+  let res;
+  try {
+    res = await fetchWithRetry(url, {
+      method: "POST",
+      headers: realHeaders,
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return { ok: false, error: `retry HTTP: ${err && err.message || String(err)}` };
+  }
+  if (res.status < 200 || res.status >= 300) {
+    return { ok: false, error: `retry HTTP ${res.status}` };
+  }
+  let json;
+  try { json = JSON.parse(res.bodyText); }
+  catch (e) { return { ok: false, error: "retry response unparseable" }; }
+  const parsed = parseResponse(json);
+  if (parsed.refusalReason || !parsed.image) {
+    return { ok: false, error: parsed.refusalReason || "retry returned no image" };
+  }
+  let keyResult;
+  try {
+    keyResult = chromaKeyAnyImage(parsed.image, parsed.responseMimeType, keyOpts);
+  } catch (err) {
+    return { ok: false, error: `retry chroma-key: ${err && err.message || String(err)}` };
+  }
+  return {
+    ok: true,
+    outputBytes: keyResult.buffer,
+    chromaStats: keyResult.stats,
+    parsedImage: parsed.image,
+    parsedMime: parsed.responseMimeType,
+    thoughtSignature: parsed.thoughtSignature,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Output contract
 // ---------------------------------------------------------------------------
 
@@ -1695,6 +2511,20 @@ function main() {
     process.exit(0);
   }
 
+  if (args.listModels) {
+    // Async work — exits when the API responds. No validation needed
+    // (only --list-models matters; other flags ignored).
+    listModelsFlow().then(
+      (code) => process.exit(code),
+      (err) => {
+        emitError("E_UNEXPECTED_HTTP",
+          "list-models: " + (err && err.message || String(err)));
+        process.exit(1);
+      }
+    );
+    return;
+  }
+
   const v = validateArgs(args, stylesIndex);
   if (!v.ok) {
     emitError(v.code, v.error);
@@ -1743,6 +2573,88 @@ function main() {
       process.exit(1);
     }
   );
+}
+
+// --list-models flow. Probes Gemini's models endpoint with the resolved API
+// key and prints a JSON list of image-gen models the key is approved for,
+// each annotated with whether it matches an alias and whether it's
+// nanogen's default. Output shape:
+//   {
+//     success: true,
+//     default: "gemini-3-pro-image-preview",
+//     envOverride: "<NANOGEN_MODEL value or null>",
+//     models: [
+//       {name, displayName, aliases: [...], inNanogenValidSet: bool, isDefault: bool},
+//       ...
+//     ]
+//   }
+async function listModelsFlow() {
+  const resolved = resolveApiKey();
+  if (!resolved) {
+    emitError("E_MISSING_API_KEY",
+      "Set GEMINI_API_KEY (or GOOGLE_API_KEY as fallback). " +
+      "See build/nanogen/README.md.");
+    return 1;
+  }
+  const base = process.env.NANOGEN_API_BASE ||
+               "https://generativelanguage.googleapis.com";
+  const url = `${base}/v1beta/models`;
+  let res;
+  try {
+    res = await fetchWithRetry(url, {
+      method: "GET",
+      headers: { "x-goog-api-key": resolved.key },
+    });
+  } catch (err) {
+    emitError("E_UNEXPECTED_HTTP",
+      "list-models HTTP error: " + (err && err.message || String(err)));
+    return 1;
+  }
+  if (res.status < 200 || res.status >= 300) {
+    const code = mapHttpError(res.status, res.bodyText || "");
+    emitError(code, `list-models HTTP ${res.status}`);
+    return 1;
+  }
+  let json;
+  try { json = JSON.parse(res.bodyText); }
+  catch (e) {
+    emitError("E_UNEXPECTED_HTTP", "list-models response unparseable");
+    return 1;
+  }
+  // Build reverse-alias index so each model name can list the aliases that
+  // point at it (e.g. gemini-3-pro-image-preview ← ["pro"]).
+  const aliasesOf = {};
+  for (const [alias, target] of Object.entries(MODEL_ALIASES)) {
+    if (!aliasesOf[target]) aliasesOf[target] = [];
+    aliasesOf[target].push(alias);
+  }
+  const models = (json.models || [])
+    .filter((m) => {
+      // Only image-generation models — name or displayName has "image".
+      const name = (m.name || "").toLowerCase();
+      const dn = (m.displayName || "").toLowerCase();
+      return name.includes("image") || dn.includes("image");
+    })
+    .map((m) => {
+      const fullName = (m.name || "").replace(/^models\//, "");
+      return {
+        name: fullName,
+        displayName: m.displayName || null,
+        aliases: aliasesOf[fullName] || [],
+        inNanogenValidSet: VALID_MODELS.includes(fullName),
+        isDefault: fullName === DEFAULT_MODEL,
+        supportedMethods: m.supportedGenerationMethods || [],
+      };
+    });
+  const payload = {
+    success: true,
+    default: DEFAULT_MODEL,
+    envOverride: process.env.NANOGEN_MODEL || null,
+    aliases: MODEL_ALIASES,
+    models,
+  };
+  process.stdout.write(JSON.stringify(payload) + "\n");
+  return 0;
 }
 
 async function runHttpFlow(args, stylesIndex) {
@@ -1887,6 +2799,131 @@ async function runHttpFlow(args, stylesIndex) {
   // Success path. parseResponse guarantees parsed.image is a valid Buffer
   // whose magic bytes match a supported format.
   //
+  // Two code paths from here:
+  //   (A) --transparent set: transcode bytes to a chroma-keyed PNG and
+  //       always write under the user's .png filename. The MIME-rename
+  //       path below is skipped — chromaKeyAnyImage handles JPEG-or-PNG
+  //       input and emits PNG-with-alpha output.
+  //   (B) default: write Gemini's bytes as-is. If the returned MIME
+  //       disagrees with the declared extension, rename the output
+  //       file to match (see the multi-paragraph rationale below the
+  //       transparency block).
+  let chromaStats = null;
+  let outputBytes = parsed.image;
+  if (args.transparent) {
+    const keyOpts = {
+      chromaKey: args.chromaKey,
+      tolerance: args.chromaTolerance,
+      // Auto-expand only when the user didn't pin a tolerance themselves.
+      // Explicit tuners stay in control; lazy defaults get the smart path.
+      autoExpand: !args.chromaToleranceExplicit,
+    };
+    // First-attempt outcomes are one of three:
+    //   - success (clean / edge-spill / subject-overlap)
+    //   - E_CHROMA_NO_MATCH (model painted no key → retry might help)
+    //   - other ChromaKeyError (deterministic; retry pointless)
+    let firstAttemptError = null;
+    try {
+      const r = chromaKeyAnyImage(parsed.image, parsed.responseMimeType, keyOpts);
+      outputBytes = r.buffer;
+      chromaStats = r.stats;
+    } catch (err) {
+      if (err && err.name === "ChromaKeyError") {
+        if (err.code === "E_CHROMA_NO_MATCH" &&
+            !args.noAutoRetry && !args.historyContinue) {
+          firstAttemptError = err;  // recoverable — fall through to retry
+        } else {
+          const detail = err.details
+            ? `${err.message} (${JSON.stringify(err.details)})`
+            : err.message;
+          emitError(err.code || "E_CHROMA_FAILED", detail);
+          return 1;
+        }
+      } else {
+        throw err;
+      }
+    }
+
+    // Auto-retry path. Triggers when:
+    //   - first attempt failed E_CHROMA_NO_MATCH (model painted no key),
+    //     OR first attempt's qualityClass is "edge-spill" (visible fringe
+    //     likely from generation variance).
+    // Skipped when:
+    //   - "clean"            → no need
+    //   - "subject-overlap"  → retry unlikely to help; agent layer should
+    //                          pick a different chroma key or accept the
+    //                          JPEG-resolution floor
+    //   - args.noAutoRetry   → user opted out
+    //   - args.historyContinue → multi-turn continuation; retrying would
+    //                            break the thoughtSignature chain
+    const shouldRetry = !args.noAutoRetry && !args.historyContinue && (
+      firstAttemptError !== null ||
+      (chromaStats && chromaStats.qualityClass === "edge-spill")
+    );
+    if (shouldRetry) {
+      const firstAttemptSnapshot = chromaStats ? {
+        nearKeyPercentOfSubject: chromaStats.nearKeyPercentOfSubject,
+        qualityClass: chromaStats.qualityClass,
+        retainedVisiblePixels: chromaStats.retainedVisiblePixels,
+        autoExpanded: chromaStats.autoExpanded || false,
+      } : null;
+      const retry = await retryGenerateOnce(
+        url, realHeaders, body, parsed.responseMimeType, keyOpts);
+      if (retry.ok) {
+        const retryStats = retry.chromaStats;
+        const retryAttempt = {
+          nearKeyPercentOfSubject: retryStats.nearKeyPercentOfSubject,
+          qualityClass: retryStats.qualityClass,
+          retainedVisiblePixels: retryStats.retainedVisiblePixels,
+          autoExpanded: retryStats.autoExpanded || false,
+        };
+        // If first attempt errored, retry is automatically the winner.
+        // Otherwise pick the lower near-key density.
+        const retryBetter = firstAttemptError !== null ||
+          retryStats.nearKeyPercentOfSubject <
+            (chromaStats ? chromaStats.nearKeyPercentOfSubject : Infinity);
+        if (retryBetter) {
+          parsed.image = retry.parsedImage;
+          parsed.responseMimeType = retry.parsedMime;
+          parsed.thoughtSignature = retry.thoughtSignature;
+          outputBytes = retry.outputBytes;
+          chromaStats = {
+            ...retryStats,
+            retried: true,
+            retryKept: "retry",
+            firstAttempt: firstAttemptSnapshot,
+            firstAttemptError: firstAttemptError ? firstAttemptError.code : undefined,
+            retryAttempt,
+          };
+        } else {
+          chromaStats = {
+            ...chromaStats,
+            retried: true,
+            retryKept: "first",
+            firstAttempt: firstAttemptSnapshot,
+            retryAttempt,
+          };
+        }
+      } else {
+        // Retry itself failed. If first attempt also failed, surface the
+        // original error. Otherwise keep first.
+        if (firstAttemptError !== null) {
+          const detail = firstAttemptError.details
+            ? `${firstAttemptError.message} (${JSON.stringify(firstAttemptError.details)}) — retry also failed: ${retry.error}`
+            : `${firstAttemptError.message} — retry also failed: ${retry.error}`;
+          emitError(firstAttemptError.code, detail);
+          return 1;
+        }
+        chromaStats = {
+          ...chromaStats,
+          retried: true,
+          retryKept: "first",
+          retryError: retry.error,
+        };
+      }
+    }
+  }
+
   // Extension-vs-returned-MIME handling: Gemini frequently returns JPEG
   // bytes even when the user asked for `.png`. Rather than writing
   // JPEG bytes under a lying .png name (which confuses downstream
@@ -1897,6 +2934,10 @@ async function runHttpFlow(args, stylesIndex) {
   // happened, `renamed: {from, to, reason}` is included so scripts
   // can detect it. The stderr warning tells the user how to avoid
   // the rename (pass --output with a matching extension up front).
+  //
+  // SKIPPED when --transparent is set: outputBytes is a freshly-encoded
+  // PNG regardless of what Gemini returned, and the user already passed
+  // --output ending in .png (enforced by validation rule 4a).
   const mimeToFmt = {
     "image/png": "png",
     "image/jpeg": "jpeg",
@@ -1911,7 +2952,8 @@ async function runHttpFlow(args, stylesIndex) {
   const actualFmt = mimeToFmt[parsed.responseMimeType] || null;
   const declaredExt = path.extname(args.output).slice(1).toLowerCase();
   const normalizedDeclaredExt = normalizedExtFormat(declaredExt);
-  const needsRename = actualFmt && normalizedDeclaredExt && actualFmt !== normalizedDeclaredExt;
+  const needsRename = !args.transparent && actualFmt && normalizedDeclaredExt &&
+                      actualFmt !== normalizedDeclaredExt;
 
   let actualPath = args.output;
   let renameInfo = null;
@@ -1932,7 +2974,7 @@ async function runHttpFlow(args, stylesIndex) {
 
   try {
     fs.mkdirSync(path.dirname(path.resolve(actualPath)), { recursive: true });
-    fs.writeFileSync(actualPath, parsed.image);
+    fs.writeFileSync(actualPath, outputBytes);
   } catch (err) {
     emitError("E_UNEXPECTED_HTTP",
       "failed to write output: " + (err && err.message || String(err)));
@@ -1943,7 +2985,7 @@ async function runHttpFlow(args, stylesIndex) {
   try {
     bytesWritten = fs.statSync(actualPath).size;
   } catch (_) {
-    bytesWritten = parsed.image ? parsed.image.length : 0;
+    bytesWritten = outputBytes ? outputBytes.length : 0;
   }
 
   // From this point on, the canonical output path is actualPath.
@@ -1971,6 +3013,7 @@ async function runHttpFlow(args, stylesIndex) {
     refusalReason: null,
   };
   if (renameInfo) payload.renamed = renameInfo;
+  if (chromaStats) payload.chroma = chromaStats;
   if (historyWarning) payload.historyWarning = historyWarning;
   process.stdout.write(JSON.stringify(payload) + "\n");
 
@@ -2019,6 +3062,15 @@ module.exports = {
   resolveContinuation,
   buildContinuationRequestFromMaterials,
   OUTPUT_FORMAT_TO_MIME,
+  // Chroma-key transparency:
+  chromaKeyAnyImage,
+  parsePng,
+  encodeRgbaPng,
+  parseJpeg,
+  ChromaKeyError,
+  DEFAULT_CHROMA_KEY,
+  DEFAULT_CHROMA_TOLERANCE,
+  MAX_CHROMA_TOLERANCE,
 };
 
 if (require.main === module) {

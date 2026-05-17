@@ -18,7 +18,7 @@ API.
 |-------|----------|----------|-----------|
 | [`imagegen`](https://github.com/zeveck/imagegen) | OpenAI `gpt-image-1` | Classic game assets, direct transparent PNG/WebP sprites and icons | Older OpenAI image model, legacy size set |
 | [`imagegen2`](https://github.com/zeveck/imagegen2) | OpenAI `gpt-image-2` | Current OpenAI image path, flexible sizes up to 4K-class outputs, high-fidelity edits | Transparent PNG sprites should use local chroma-key cleanup; true native alpha requires explicit `gpt-image-1.5` fallback |
-| `nanogen` | Google Gemini / Nano Banana image models | Rich style catalog, natural-language edits, multi-image composition, multi-turn refinement | No native alpha output; often returns JPEG and uses chromakey/post-processing for transparent-style assets |
+| `nanogen` | Google Gemini / Nano Banana image models | Rich style catalog, natural-language edits, multi-image composition, multi-turn refinement, transparent sprites via built-in chroma-key (no native alpha) | Returns JPEG by default; transparent output is binary-alpha only — soft/fluffy edges will fringe |
 
 For sprite-sheet animation built on top of `imagegen2`, see
 [`anim8gen`](https://github.com/zeveck/anim8gen). For game audio, see
@@ -225,7 +225,19 @@ export GEMINI_API_KEY='...'
 echo 'GEMINI_API_KEY=...' > .env
 ```
 
-Get a key at <https://aistudio.google.com/app/apikey>.
+Get a key at <https://aistudio.google.com/app/apikey>. See
+[`.env.example`](.env.example) for the full list of optional knobs.
+
+### Pick a model
+
+| Alias | Model | 1K image cost | When |
+|---|---|---|---|
+| `flash` *(default)* | `gemini-3.1-flash-image-preview` (Nano Banana 2) | **$0.067** | Most work — speed, batch, draft iteration |
+| `pro` | `gemini-3-pro-image-preview` (Nano Banana Pro) | **$0.134** (2×) | Small quality edge on fringe-sensitive subjects (vector edges, fluffy fur, text) |
+| `flash-stable` | `gemini-2.5-flash-image` (Nano Banana, GA) | **$0.039** | Cheapest; older model, less prompt fidelity |
+
+Set `NANOGEN_MODEL=pro` in `.env` to switch your default, or `--model pro` per
+call. `nanogen --list-models` shows what your key can access.
 
 ---
 
@@ -267,6 +279,34 @@ whether a key would resolve.
 
 ---
 
+## Transparent backgrounds — what to expect
+
+Nano Banana doesn't produce transparent PNGs natively. nanogen works
+around it the way the VFX industry has since green-screen weather
+forecasts: **chroma keying.** It tells the model to paint a flat
+magenta backdrop, then strips that color out and saves a PNG with
+alpha. Just ask for transparency in your prompt — no flags needed:
+
+```
+/nanogen transparent goblin warrior sprite, pixel art
+/nanogen icon of a coffee cup, flat vector, for use as a sticker
+/nanogen kitten portrait with alpha background for compositing
+```
+
+Words like *transparent*, *alpha*, *no background*, *sprite*, *for
+overlay*, or *cutout* engage the pipeline automatically. Most
+subjects come out clean on the first or second try (nanogen retries
+behind the scenes if the first attempt looks fringed).
+
+The honest caveats: alpha is **binary** (no soft edges), and fuzzy
+silhouettes (white fur, smoke, wispy hair) or subjects whose colors
+match the key will show a faint halo. Render at a larger `--size` if
+fringe matters. See
+[`reference.md`](build/nanogen/reference.md#transparency-workflow---transparent)
+for the algorithmic details.
+
+---
+
 ## Good Fits
 
 - Concept art and reference imagery
@@ -274,20 +314,24 @@ whether a key would resolve.
 - Natural-language edits to existing images, including regional edits
 - Multi-image composition (up to 14 references per call)
 - Iterative refinement of a single image across turns
+- Sprite/icon work with transparent backgrounds (chroma-keyed; see above)
 
-Not a good fit for true transparent PNG sprites (use
-[`imagegen`](https://github.com/zeveck/imagegen) for native alpha) or
-sprite-sheet animation (see
-[`anim8gen`](https://github.com/zeveck/anim8gen)).
+Sprite-sheet animation isn't supported — see
+[`anim8gen`](https://github.com/zeveck/anim8gen).
 
 ---
 
 ## Credits
 
 - Shape and spirit borrowed from [zeveck/imagegen](https://github.com/zeveck/imagegen).
+- Chroma-key pipeline ported from [zeveck/imagegen2](https://github.com/zeveck/imagegen2).
+- JPEG decoding via vendored [jpeg-js](https://github.com/eugeneware/jpeg-js)
+  (BSD-3-Clause + Apache-2.0, see `build/nanogen/vendor/`).
 - Uses [Google Gemini](https://ai.google.dev/gemini-api/docs/image-generation).
 - Built with [Claude Code](https://claude.com/claude-code).
 
 ## License
 
-MIT.
+MIT for first-party code. Third-party vendored code keeps its
+upstream license — see `build/nanogen/vendor/jpeg-js.LICENSE` and
+the header of `build/nanogen/vendor/jpeg-decoder.js`.

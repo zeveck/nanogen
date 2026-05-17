@@ -510,5 +510,156 @@ test("--dry-run URL respects NANOGEN_API_BASE override", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Transparency flags
+// ---------------------------------------------------------------------------
+
+test("--transparent: dry-run succeeds with PNG output", () => {
+  const res = runCLI(
+    ["--prompt", "a goblin", "--transparent", "--output", "g.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assert.equal(res.status, 0, `stdout=${res.stdout} stderr=${res.stderr}`);
+  const j = parseStdoutJson(res.stdout);
+  assert.equal(j.dryRun, true);
+  // Prompt suffix appears in the composed prompt text
+  assert.match(
+    j.body.contents[0].parts[0].text,
+    /Solid flat #ff00ff chroma-key background filling the canvas/,
+    "default magenta chroma-key suffix should appear in the prompt"
+  );
+});
+
+test("--transparent: rejects .jpg output (E_TRANSPARENT_REQUIRES_PNG)", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent", "--output", "x.jpg", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_TRANSPARENT_REQUIRES_PNG");
+});
+
+test("--transparent: rejects .webp output (E_TRANSPARENT_REQUIRES_PNG)", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent", "--output", "x.webp", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_TRANSPARENT_REQUIRES_PNG");
+});
+
+test("--chroma-key without --transparent → E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--chroma-key", "#00ff00", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT");
+});
+
+test("--chroma-tolerance without --transparent → E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--chroma-tolerance", "50", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT");
+});
+
+test("--transparent-mode without --transparent → E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent-mode", "chroma-key", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT");
+});
+
+test("--chroma-key invalid hex → E_BAD_CHROMA_KEY", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent", "--chroma-key", "green", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_BAD_CHROMA_KEY");
+});
+
+test("--chroma-tolerance out of range → E_BAD_CHROMA_TOLERANCE", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent", "--chroma-tolerance", "999", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_BAD_CHROMA_TOLERANCE");
+});
+
+test("--chroma-tolerance non-integer → E_BAD_CHROMA_TOLERANCE", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent", "--chroma-tolerance", "1.5", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_BAD_CHROMA_TOLERANCE");
+});
+
+test("--transparent-mode unknown value → E_BAD_TRANSPARENT_MODE", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent", "--transparent-mode", "native", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_BAD_TRANSPARENT_MODE");
+});
+
+test("--transparent with --region → E_TRANSPARENT_REGION_CONFLICT", () => {
+  const res = runCLI(
+    ["--image", goodPng, "--region", "blue sky", "--transparent",
+      "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assertErrorJson(res, "E_TRANSPARENT_REGION_CONFLICT");
+});
+
+test("--transparent edit-mode: dry-run prompt uses 'Replace the background' wording", () => {
+  const res = runCLI(
+    ["--prompt", "make it dramatic", "--image", goodPng,
+     "--transparent", "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assert.equal(res.status, 0, `stdout=${res.stdout} stderr=${res.stderr}`);
+  const j = parseStdoutJson(res.stdout);
+  assert.match(
+    j.body.contents[0].parts[0].text,
+    /Replace the background with solid flat #ff00ff fill/
+  );
+});
+
+test("--transparent --chroma-key #00ff00: custom color reflected in prompt suffix", () => {
+  const res = runCLI(
+    ["--prompt", "X", "--transparent", "--chroma-key", "#00FF00",
+     "--output", "x.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assert.equal(res.status, 0);
+  const j = parseStdoutJson(res.stdout);
+  // Color lower-cased by validation
+  assert.match(
+    j.body.contents[0].parts[0].text,
+    /Solid flat #00ff00 chroma-key background/
+  );
+});
+
+test("default behavior: prompt does NOT contain chroma-key suffix without --transparent", () => {
+  const res = runCLI(
+    ["--prompt", "a goblin", "--output", "g.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "" }) }
+  );
+  assert.equal(res.status, 0);
+  const j = parseStdoutJson(res.stdout);
+  assert.doesNotMatch(
+    j.body.contents[0].parts[0].text,
+    /chroma-key/
+  );
+});
+
+test("--help mentions --transparent and --chroma-key", () => {
+  const res = runCLI(["--help"]);
+  assert.equal(res.status, 0);
+  assert.match(res.stdout, /--transparent\b/);
+  assert.match(res.stdout, /--chroma-key/);
+  assert.match(res.stdout, /--chroma-tolerance/);
+});
+
+// ---------------------------------------------------------------------------
 
 runAll();
