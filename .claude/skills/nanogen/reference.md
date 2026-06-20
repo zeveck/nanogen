@@ -10,9 +10,9 @@ asset-prompt templates, the aspect-ratio table, pricing, error
 root-causes, environment variables, the verbatim stderr warnings
 the CLI emits, or documentation of known Nano Banana gotchas.
 
-Current as of **2026-04-17**. Preview-tier models (`gemini-3.x`)
-may change shape; if the CLI starts logging unknown response
-parts, this file may be stale.
+Current as of **2026-06-19**. The `gemini-3.x` image models went
+GA on 2026-05-28 (the `-preview` ids shut down 2026-06-25); if the
+CLI starts logging unknown response parts, this file may be stale.
 
 ## Complete style catalog
 
@@ -263,64 +263,101 @@ setup], [background treatment].
 [compositional notes], [lighting].
 ```
 
-### Transparency workflow (the chromakey pattern)
+### Transparency workflow (`--transparent`)
 
 **Nano Banana does not produce alpha output natively.** Google's
 docs (https://ai.google.dev/gemini-api/docs/image-generation)
 explicitly state: *"The model does not support generating a
 transparent background."* Every generation returns a solid-
-background RGB image.
+background RGB image — and Gemini frequently returns JPEG even
+when PNG is requested.
 
-That's not a dealbreaker for sprite work — the community-standard
-workflow is generate-then-strip:
+nanogen synthesizes transparency end-to-end via the
+`--transparent` flag. The pipeline is:
 
-1. **Generate on a chromakey background.** Prompt for a
-   pure solid color the subject doesn't contain, e.g.
-   `"on a pure chromakey green (#00FF00) background, no
-   scenery, no shadows, no ground plane"`. Green is preferred
-   because fewer subjects contain pure `#00FF00`; magenta
-   (`#FF00FF`) is the common alternative. Avoid white if the
-   subject has any white details (armor highlights, teeth,
-   paper, text) — they'll get erased.
+1. **Prompt augmentation.** A sentence describing the chroma key
+   is appended to the composed prompt — coercing the model into
+   painting a uniform flat color behind the subject:
+   `Solid flat #ff00ff chroma-key background filling the canvas,
+   no shadows, no gradients, no background objects.` Edit mode
+   (`--image` without `--history-continue`) gets the variant
+   `Replace the background with solid flat #ff00ff fill, ...`.
 
-2. **Strip the key color with any off-the-shelf tool.** nanogen
-   does not ship image-processing dependencies; use ImageMagick
-   (ubiquitous, pre-installed on most dev containers):
+2. **Decode whatever Gemini returned.** PNG goes through a
+   built-in PNG codec; JPEG goes through a vendored copy of
+   `jpeg-js` (`build/nanogen/vendor/jpeg-decoder.js`). Both paths
+   land in the same RGBA buffer.
 
-   ```bash
-   # Strip chromakey green to transparent alpha
-   convert sprite.jpg -fuzz 10% -transparent '#00FF00' sprite.png
+3. **Key.** Every pixel within Euclidean RGB distance ≤
+   `--chroma-tolerance` of `--chroma-key` gets alpha = 0.
 
-   # Or strip a white background (only safe for subjects without white)
-   convert sprite.jpg -fuzz 5% -transparent white sprite.png
-   ```
+4. **Alpha-bleed.** Transparent pixels' RGB is filled from the
+   nearest opaque neighbor (BFS). Without this, naive compositors
+   show a black or magenta halo around the subject.
 
-   The `-fuzz` tolerance handles JPEG compression's edge smearing.
-   Tune 5-15% depending on how clean the key is.
+5. **Spill suppression.** Visible pixels adjacent to transparent
+   ones that look like "almost-key" color (lit by the key, JPEG
+   smear) get replaced with the local non-spill average.
 
-3. **Verify the result.** Open the resulting PNG in an editor
-   with a checkerboard background; the subject should have clean
-   edges and the key color should be fully gone. If you see
-   green fringing around the subject, raise `-fuzz` slightly;
-   if subject detail is being erased, lower it.
+6. **Re-encode as PNG with alpha.** Output is always `.png`.
 
-Alternative workflows for specific scenarios:
+Example:
 
-- **Dual-generation alpha recovery** — generate the same subject
-  on white, then again on black, diff the two to recover a mask.
-  Relies on cross-generation consistency; less reliable than
-  chromakey.
-- **Gemini 3 Code Execution** — ask Gemini 3 Flash (separate
-  invocation, NOT nanogen) to "remove the background" and it
-  will write + run its own Python (PIL/OpenCV) to strip the
-  key color. Fully automatic but adds a second API call.
+```bash
+nanogen --prompt "pixel-art sprite of a goblin warrior, full body" \
+        --style pixel-art \
+        --transparent \
+        --output goblin.png
+```
 
-The `/nanogen` skill's pixel-art / sprite / icon asset-type
-defaults suggest `.jpg` output — which is fine for the chromakey
-workflow since ImageMagick re-encodes losslessly into PNG on
-strip. For hard-edged pixel art where JPEG compression would
-damage edges, consider `--size 2K` to give ImageMagick more
-pixels to work with before the key removal.
+Flags:
+
+| Flag                    | Default     | Notes                                              |
+|-------------------------|-------------|----------------------------------------------------|
+| `--transparent`         | off         | Enables the synthesis pipeline. Requires `.png`.   |
+| `--transparent-mode`    | `chroma-key`| Reserved for future modes. Only `chroma-key` valid.|
+| `--chroma-key <#hex>`   | `#ff00ff`   | Magenta — rare in natural imagery, fewer false transparents than green.|
+| `--chroma-tolerance <n>`| `60`        | Integer 0–442. Higher = more aggressive removal.   |
+
+Output JSON includes a `chroma` block:
+
+```json
+{
+  "chroma": {
+    "chromaKey": "#ff00ff",
+    "tolerance": 40,
+    "width": 1024,
+    "height": 1024,
+    "sourceMimeType": "image/jpeg",
+    "removedPixels": 543210,
+    "retainedVisiblePixels": 505366,
+    "alphaBleedPixels": 543210,
+    "spillSuppressedPixels": 2104
+  }
+}
+```
+
+#### Known limits
+
+- **Alpha is binary.** Soft edges (smoke, hair fringe, motion
+  blur) won't get partial alpha — they'll either be opaque or
+  cut. For soft compositing you still need a hand-painted mask.
+- **`--transparent` + `--region` is rejected** (`E_TRANSPARENT_REGION_CONFLICT`).
+  The whole-canvas chroma prompt conflicts with regional edits.
+- **`E_CHROMA_NO_MATCH`** if the model ignored the prompt suffix
+  and painted no key-colored pixels. Retry with a higher
+  `--chroma-tolerance`, or a more contrast-y `--chroma-key` for
+  the subject (e.g. `#00ff00` for portraits with lots of red).
+- **Max image size:** ~25M pixels (≈ 5000×5000). Hard-limit in
+  the codec to prevent runaway memory use.
+- **Tolerance tuning.** PNG returns from Gemini are clean and
+  tolerance ~20 suffices. JPEG returns smear the key cluster
+  and want 50–70 — the magenta key gets compressed to ≈40 RGB
+  distance, so anything below 50 leaves a visible spill ring.
+  Default is 60 (empirically clean across pixel-art sprites,
+  flat icons, and photographic subjects on Gemini 3.1 Flash
+  output). Drop to 30–40 only when the subject contains
+  saturated near-magenta colors that would otherwise be eaten.
 
 ## Aspect ratio guidance
 
@@ -350,23 +387,24 @@ typography.
 
 ## Pricing
 
-Nano Banana per-image costs as of April 2026 (USD):
+Nano Banana per-image costs (unchanged through the 2026-05-28 GA
+transition; verified 2026-06-19) (USD):
 
 | Model | Size | $/image |
 |---|---|---|
-| `gemini-3-pro-image-preview` | 1K | $0.134 |
-| `gemini-3-pro-image-preview` | 2K | $0.134 |
-| `gemini-3-pro-image-preview` | 4K | $0.24 |
-| `gemini-3.1-flash-image-preview` | 512 | $0.022 |
-| `gemini-3.1-flash-image-preview` | 1K | $0.034 |
-| `gemini-3.1-flash-image-preview` | 2K | $0.050 |
-| `gemini-3.1-flash-image-preview` | 4K | $0.076 |
+| `gemini-3-pro-image` | 1K | $0.134 |
+| `gemini-3-pro-image` | 2K | $0.134 |
+| `gemini-3-pro-image` | 4K | $0.24 |
+| `gemini-3.1-flash-image` | 512 | $0.022 |
+| `gemini-3.1-flash-image` | 1K | $0.034 |
+| `gemini-3.1-flash-image` | 2K | $0.050 |
+| `gemini-3.1-flash-image` | 4K | $0.076 |
 | `gemini-2.5-flash-image` (GA; shutdown 2026-10-02) | 1024 | $0.039 |
 
 Batch API (not used by this CLI): 50% off output tokens, 24h
 turnaround.
 
-Free-tier quota exists on `gemini-3.1-flash-image-preview` in AI
+Free-tier quota exists on `gemini-3.1-flash-image` in AI
 Studio; specifics change per account. Check
 https://aistudio.google.com/rate-limit for your account's limits.
 
@@ -393,7 +431,8 @@ SKILL.md's table.
   `.jpeg`, or `.webp`. The CLI uses the extension to pick the
   `responseMimeType`.
 - **E_UNKNOWN_MODEL** — `--model` is not one of the three
-  supported ids. Preview-tier models change names; check
+  supported ids (or the `pro` / `flash` / `flash-stable`
+  aliases). Model names change across GA rollouts; check
   `--help` output.
 - **E_BAD_ASPECT** — Aspect ratio not one of the 14 valid
   strings. Gemini will reject anything else server-side, so the
@@ -440,6 +479,44 @@ SKILL.md's table.
 - **E_REGION_WITHOUT_IMAGE** — `--region` is edit-mode-only. It
   has no effect in generate mode; passing it without `--image`
   is almost certainly a bug.
+- **E_TRANSPARENT_REQUIRES_PNG** — `--transparent` synthesizes a
+  PNG with alpha. JPEG and WEBP outputs are rejected; pass
+  `--output …png`.
+- **E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT** — `--chroma-key`,
+  `--chroma-tolerance`, and `--transparent-mode` are no-ops unless
+  `--transparent` is set; rather than silently ignore them, the
+  CLI fails fast.
+- **E_TRANSPARENT_REGION_CONFLICT** — `--transparent` and
+  `--region` cannot be combined. The whole-canvas chroma prompt
+  conflicts with regional edit instructions; pick one.
+- **E_BAD_TRANSPARENT_MODE** — Only `chroma-key` is supported
+  today. The flag exists for future modes (native alpha if Google
+  ever ships it).
+- **E_BAD_CHROMA_KEY** — `--chroma-key` must be a 6-digit hex
+  color like `#ff00ff`. Named colors and shorthand `#f0f` are
+  not accepted.
+- **E_BAD_CHROMA_TOLERANCE** — `--chroma-tolerance` must be an
+  integer in `0..442` (inclusive). 442 is `ceil(sqrt(3·255²))`,
+  the maximum possible RGB distance.
+- **E_CHROMA_NO_MATCH** — Post-processing found no pixels within
+  tolerance of the chroma key. The model painted no key-colored
+  background. Retry; if it recurs, raise `--chroma-tolerance` or
+  pick a chroma color the subject doesn't already contain. The
+  error payload includes `chromaKey`, `tolerance`, and
+  `retainedVisiblePixels` so you can decide which knob to turn.
+- **E_CHROMA_BAD_PNG** — The PNG codec couldn't parse the
+  response bytes (missing signature, bad CRC, unsupported color
+  type/bit-depth/interlace). Only 8-bit RGB/RGBA non-interlaced
+  PNGs are supported.
+- **E_CHROMA_BAD_JPEG** — The JPEG decoder rejected the response
+  bytes. Most likely Gemini returned a JPEG variant `jpeg-js`
+  doesn't handle (progressive, arithmetic-coded). Retry once;
+  persistent → file an issue with the bytes attached.
+- **E_CHROMA_TOO_LARGE** — Image exceeds the 25M-pixel chroma-key
+  cap (in-memory safety guard). Drop `--size`.
+- **E_CHROMA_UNSUPPORTED_MIME** — Gemini returned a MIME the
+  chroma-key pipeline can't transcode (e.g. WEBP). Retry; if it
+  recurs, file an issue.
 
 ### Env
 
@@ -506,12 +583,12 @@ SKILL.md's table.
   Ask IT or use a personal Google account.
 - **E_REGION** — 403 from a country or region where the Gemini
   image API is not available (sanctioned countries, or
-  occasionally new preview-model rollouts that haven't reached
+  occasionally new model rollouts that haven't reached
   the caller's region).
 - **E_FORBIDDEN** — Generic 403. Read stderr body — could be
   billing disabled, quota not enabled for this project, etc.
-- **E_MODEL_NOT_FOUND** — 404 on the model id. Preview models
-  get renamed; double-check `--model` spelling.
+- **E_MODEL_NOT_FOUND** — 404 on the model id. Models get
+  renamed across GA rollouts; double-check `--model` spelling.
 - **E_RATE_LIMIT** — 429 after the retry budget was exhausted.
   Either wait for your quota window to reset, or upgrade tier.
 - **E_UPSTREAM_5XX** — Gemini returned 5xx after the retry
@@ -612,11 +689,13 @@ flagging:
    `--size 2K` (or `4K`) + `--thinking high`. Small sizes
    regularly produce convincing-looking-but-unreadable
    "almost-text".
-4. **Preview models can break without warning.** `gemini-3.x`
-   image preview models are pre-GA. Response shape, pricing, and
-   availability may change. The CLI logs unknown response parts
-   rather than crashing, so a new part type surfaces as a warning
-   rather than an outage.
+4. **Model lineups change on a deprecation clock.** The
+   `gemini-3.x` image models went GA on 2026-05-28; the older
+   `-preview` ids shut down 2026-06-25, and `gemini-2.5-flash-image`
+   is scheduled for shutdown 2026-10-02. Response shape, pricing,
+   and availability may change across rollouts. The CLI logs
+   unknown response parts rather than crashing, so a new part type
+   surfaces as a warning rather than an outage.
 5. **Google Workspace admin lockout is possible.** Enterprise
    Google accounts may have image generation disabled at the
    tenant level. If you see `E_ADMIN_DISABLED`, either ask your
@@ -638,8 +717,8 @@ flagging:
 
 ## Version note
 
-This reference is current as of **2026-04-17**. Preview-tier
-models (`gemini-3.x` image preview) may change shape; if
+This reference is current as of **2026-06-19**. The `gemini-3.x`
+image models are GA (the `-preview` ids shut down 2026-06-25); if
 `generateContent` starts returning an unexpected schema part, the
 CLI will log it to stderr rather than crashing, and this file
 should be updated.
