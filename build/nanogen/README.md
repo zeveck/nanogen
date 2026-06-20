@@ -31,7 +31,7 @@ and multi-turn continuation patterns.
 |------|------|---------|-------|
 | `--prompt <str>` | string | — | Required for generation. Optional for edit mode when `--image` and `--region` are supplied. |
 | `--output <path>` | string | — | Required. Ext in `{.png,.jpg,.jpeg,.webp}`. Parent dirs auto-created. |
-| `--model <id>` | string | `gemini-3.1-flash-image-preview` | One of `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`, `gemini-2.5-flash-image`. |
+| `--model <id>` | string | `gemini-3.1-flash-image` | One of `gemini-3.1-flash-image`, `gemini-3-pro-image`, `gemini-2.5-flash-image`. |
 | `--aspect <r>` | string | `1:1` | 14 valid ratios: `1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1`. |
 | `--size <l>` | string | `1K` | One of `512, 1K, 2K, 4K`. **Uppercase K required.** `512` is flash-3.1 only. |
 | `--thinking <lvl>` | string | *(omitted → API default)* | One of `low, medium, high, minimal`. `minimal` is flash-3.1 only. |
@@ -76,7 +76,7 @@ Schema (success):
       "prompt": "<composed prompt — what was actually sent>",
       "output": "apple.png",
       "params": {
-        "model": "gemini-3.1-flash-image-preview",
+        "model": "gemini-3.1-flash-image",
         "aspectRatio": "1:1",
         "imageSize": "1K",
         "thinkingLevel": null,

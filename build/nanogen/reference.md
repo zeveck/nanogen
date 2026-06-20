@@ -10,9 +10,9 @@ asset-prompt templates, the aspect-ratio table, pricing, error
 root-causes, environment variables, the verbatim stderr warnings
 the CLI emits, or documentation of known Nano Banana gotchas.
 
-Current as of **2026-04-17**. Preview-tier models (`gemini-3.x`)
-may change shape; if the CLI starts logging unknown response
-parts, this file may be stale.
+Current as of **2026-06-19**. The `gemini-3.x` image models went
+GA on 2026-05-28 (the `-preview` ids shut down 2026-06-25); if the
+CLI starts logging unknown response parts, this file may be stale.
 
 ## Complete style catalog
 
@@ -387,23 +387,24 @@ typography.
 
 ## Pricing
 
-Nano Banana per-image costs as of April 2026 (USD):
+Nano Banana per-image costs (unchanged through the 2026-05-28 GA
+transition; verified 2026-06-19) (USD):
 
 | Model | Size | $/image |
 |---|---|---|
-| `gemini-3-pro-image-preview` | 1K | $0.134 |
-| `gemini-3-pro-image-preview` | 2K | $0.134 |
-| `gemini-3-pro-image-preview` | 4K | $0.24 |
-| `gemini-3.1-flash-image-preview` | 512 | $0.022 |
-| `gemini-3.1-flash-image-preview` | 1K | $0.034 |
-| `gemini-3.1-flash-image-preview` | 2K | $0.050 |
-| `gemini-3.1-flash-image-preview` | 4K | $0.076 |
+| `gemini-3-pro-image` | 1K | $0.134 |
+| `gemini-3-pro-image` | 2K | $0.134 |
+| `gemini-3-pro-image` | 4K | $0.24 |
+| `gemini-3.1-flash-image` | 512 | $0.022 |
+| `gemini-3.1-flash-image` | 1K | $0.034 |
+| `gemini-3.1-flash-image` | 2K | $0.050 |
+| `gemini-3.1-flash-image` | 4K | $0.076 |
 | `gemini-2.5-flash-image` (GA; shutdown 2026-10-02) | 1024 | $0.039 |
 
 Batch API (not used by this CLI): 50% off output tokens, 24h
 turnaround.
 
-Free-tier quota exists on `gemini-3.1-flash-image-preview` in AI
+Free-tier quota exists on `gemini-3.1-flash-image` in AI
 Studio; specifics change per account. Check
 https://aistudio.google.com/rate-limit for your account's limits.
 
@@ -430,7 +431,8 @@ SKILL.md's table.
   `.jpeg`, or `.webp`. The CLI uses the extension to pick the
   `responseMimeType`.
 - **E_UNKNOWN_MODEL** — `--model` is not one of the three
-  supported ids. Preview-tier models change names; check
+  supported ids (or the `pro` / `flash` / `flash-stable`
+  aliases). Model names change across GA rollouts; check
   `--help` output.
 - **E_BAD_ASPECT** — Aspect ratio not one of the 14 valid
   strings. Gemini will reject anything else server-side, so the
@@ -581,12 +583,12 @@ SKILL.md's table.
   Ask IT or use a personal Google account.
 - **E_REGION** — 403 from a country or region where the Gemini
   image API is not available (sanctioned countries, or
-  occasionally new preview-model rollouts that haven't reached
+  occasionally new model rollouts that haven't reached
   the caller's region).
 - **E_FORBIDDEN** — Generic 403. Read stderr body — could be
   billing disabled, quota not enabled for this project, etc.
-- **E_MODEL_NOT_FOUND** — 404 on the model id. Preview models
-  get renamed; double-check `--model` spelling.
+- **E_MODEL_NOT_FOUND** — 404 on the model id. Models get
+  renamed across GA rollouts; double-check `--model` spelling.
 - **E_RATE_LIMIT** — 429 after the retry budget was exhausted.
   Either wait for your quota window to reset, or upgrade tier.
 - **E_UPSTREAM_5XX** — Gemini returned 5xx after the retry
@@ -687,11 +689,13 @@ flagging:
    `--size 2K` (or `4K`) + `--thinking high`. Small sizes
    regularly produce convincing-looking-but-unreadable
    "almost-text".
-4. **Preview models can break without warning.** `gemini-3.x`
-   image preview models are pre-GA. Response shape, pricing, and
-   availability may change. The CLI logs unknown response parts
-   rather than crashing, so a new part type surfaces as a warning
-   rather than an outage.
+4. **Model lineups change on a deprecation clock.** The
+   `gemini-3.x` image models went GA on 2026-05-28; the older
+   `-preview` ids shut down 2026-06-25, and `gemini-2.5-flash-image`
+   is scheduled for shutdown 2026-10-02. Response shape, pricing,
+   and availability may change across rollouts. The CLI logs
+   unknown response parts rather than crashing, so a new part type
+   surfaces as a warning rather than an outage.
 5. **Google Workspace admin lockout is possible.** Enterprise
    Google accounts may have image generation disabled at the
    tenant level. If you see `E_ADMIN_DISABLED`, either ask your
@@ -713,8 +717,8 @@ flagging:
 
 ## Version note
 
-This reference is current as of **2026-04-17**. Preview-tier
-models (`gemini-3.x` image preview) may change shape; if
+This reference is current as of **2026-06-19**. The `gemini-3.x`
+image models are GA (the `-preview` ids shut down 2026-06-25); if
 `generateContent` starts returning an unexpected schema part, the
 CLI will log it to stderr rather than crashing, and this file
 should be updated.

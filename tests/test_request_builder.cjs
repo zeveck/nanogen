@@ -179,7 +179,7 @@ test("request-4k-pro-high-thinking.json matches builder output", () => {
       baseArgs({
         prompt: "cinematic mountain range at dawn",
         output: "mountains.png",
-        model: "gemini-3-pro-image-preview",
+        model: "gemini-3-pro-image",
         size: "4K",
         thinking: "high",
       }),
@@ -263,7 +263,7 @@ test("request-full-featured.json matches builder output with all flags set", () 
       baseArgs({
         prompt: "a fortress under siege",
         output: "fortress.png",
-        model: "gemini-3.1-flash-image-preview",
+        model: "gemini-3.1-flash-image",
         aspect: "16:9",
         size: "2K",
         thinking: "medium",
@@ -304,7 +304,7 @@ test("NANOGEN_API_BASE override is respected by the pure builder", () => {
       stylesIndex
     );
     assert.equal(r.url,
-      "http://127.0.0.1:9999/v1beta/models/gemini-3.1-flash-image-preview:generateContent");
+      "http://127.0.0.1:9999/v1beta/models/gemini-3.1-flash-image:generateContent");
   });
 });
 
@@ -334,7 +334,7 @@ test("CLI --dry-run with all flags populated matches request-full-featured.json"
   const res = spawnSync(process.execPath, [CLI,
     "--prompt", "a fortress under siege",
     "--output", "fortress.png",
-    "--model", "gemini-3.1-flash-image-preview",
+    "--model", "gemini-3.1-flash-image",
     "--aspect", "16:9",
     "--size", "2K",
     "--thinking", "medium",
