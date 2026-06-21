@@ -256,18 +256,12 @@ Duplicate category → last wins; stderr warning fires once.
 |---|---|---|
 | `gemini-3.1-flash-image` | Flash (default) | General gen + edit, iterative work, most prompts |
 | `gemini-3-pro-image` | Pro | Text-in-image, 4K output, complex multi-object scenes, reliability matters |
-| `gemini-2.5-flash-image` | GA legacy | Budget fallback ONLY. **Shutdown 2026-10-02.** Avoid for new work. |
 
 ```bash
 # Pro at 4K for a wall print
 nanogen --prompt "a minimalist geometric pattern in navy and gold" \
         --model gemini-3-pro-image --size 4K --aspect 3:2 \
         --output print.png
-
-# Budget fallback (will stop working in October)
-nanogen --prompt "..." \
-        --model gemini-2.5-flash-image --size 1K \
-        --output cheap.png
 ```
 
 Unknown model → `E_UNKNOWN_MODEL` (fails fast rather than 404'ing at

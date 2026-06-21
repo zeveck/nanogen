@@ -165,8 +165,8 @@ have?", run `nanogen --list-models` and report the approved set.
 | Text-heavy images (logos, posters) | `pro` | varies | **2K minimum** | `design-technical` |
 | Effects | `flash` | 1:1 | 1K | `speculative-niche`, `flat-vector` |
 
-Pass aliases verbatim to `--model`: `--model pro` / `--model flash` /
-`--model flash-stable`. The CLI resolves the alias to the full model name.
+Pass aliases verbatim to `--model`: `--model pro` / `--model flash`.
+The CLI resolves the alias to the full model name.
 For one-off pinning, full names (`gemini-3.1-flash-image` etc.)
 also work. Run `nanogen --list-models` to see all models the key approves
 and which alias each maps to.
@@ -299,7 +299,7 @@ One-line recovery hints. Longer root-cause paragraphs live in
 | `E_MISSING_PROMPT_OR_IMAGE` | Add `--prompt "..."` or `--image <path>`. |
 | `E_EDIT_NEEDS_INSTRUCTION` | With `--image`, add `--prompt` or `--region`. |
 | `E_BAD_OUTPUT_EXT` | Use `.png`, `.jpg`, `.jpeg`, or `.webp`. |
-| `E_UNKNOWN_MODEL` | Pick `gemini-3.1-flash-image`, `gemini-3-pro-image`, or `gemini-2.5-flash-image`. |
+| `E_UNKNOWN_MODEL` | Pick `gemini-3.1-flash-image` or `gemini-3-pro-image` (aliases `flash` / `pro`). |
 | `E_BAD_ASPECT` | Use one of the 14 valid ratios (`1:1`, `16:9`, `4:3`, `3:4`, `2:3`, `3:2`, `4:5`, `5:4`, `9:16`, `21:9`, `1:4`, `4:1`, `1:8`, `8:1`). |
 | `E_BAD_SIZE` | Use `512`, `1K`, `2K`, or `4K` (uppercase `K`). |
 | `E_SIZE_MODEL_MISMATCH` | `512` is flash-3.1 only; drop `--size 512` or switch model. |

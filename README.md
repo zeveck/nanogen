@@ -234,7 +234,6 @@ Get a key at <https://aistudio.google.com/app/apikey>. See
 |---|---|---|---|
 | `flash` *(default)* | `gemini-3.1-flash-image` (Nano Banana 2) | **$0.067** | Most work — speed, batch, draft iteration |
 | `pro` | `gemini-3-pro-image` (Nano Banana Pro) | **$0.134** (2×) | Small quality edge on fringe-sensitive subjects (vector edges, fluffy fur, text) |
-| `flash-stable` | `gemini-2.5-flash-image` (Nano Banana, GA) | **$0.039** | Cheapest; older model, less prompt fidelity |
 
 Set `NANOGEN_MODEL=pro` in `.env` to switch your default, or `--model pro` per
 call. `nanogen --list-models` shows what your key can access.
