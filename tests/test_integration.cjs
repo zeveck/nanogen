@@ -723,7 +723,7 @@ test("dry-run continuation: zero HTTP traffic; stdout is a 3-turn dryRun preview
       prompt: "cat",
       output: priorOutput,
       params: {
-        model: "gemini-3.1-flash-image-preview",
+        model: "gemini-3.1-flash-image",
         aspectRatio: "1:1",
         imageSize: "1K",
         thinkingLevel: null,

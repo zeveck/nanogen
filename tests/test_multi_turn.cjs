@@ -171,7 +171,7 @@ test("golden: request-continue-basic.json (prompt-only current turn)", () => {
       id: "cat-abc12345",
       prompt: "cat",
       output: "cat.png",
-      params: { model: "gemini-3.1-flash-image-preview" },
+      params: { model: "gemini-3.1-flash-image" },
       outputFormat: "png",
       refusalReason: null,
       thoughtSignature: "sig-abc",
@@ -202,7 +202,7 @@ test("thoughtSignature preserved byte-for-byte on the inlineData part", () => {
       id: "x",
       prompt: "p",
       output: "cat.png",
-      params: { model: "gemini-3.1-flash-image-preview" },
+      params: { model: "gemini-3.1-flash-image" },
       outputFormat: "png",
       refusalReason: null,
       thoughtSignature: sig,
@@ -238,7 +238,7 @@ test("role annotations: user, model, user", () => {
     });
     const priorEntry = {
       id: "x", prompt: "p", output: "cat.png",
-      params: { model: "gemini-3.1-flash-image-preview" },
+      params: { model: "gemini-3.1-flash-image" },
       outputFormat: "png", refusalReason: null, thoughtSignature: "s",
     };
     const r = gen.buildContinuationRequestFromMaterials(
@@ -266,7 +266,7 @@ test("golden: request-continue-with-current-image.json (current --image appended
     const { imageMaterials } = gen.readImageMaterials(args);
     const priorEntry = {
       id: "cat-abc12345", prompt: "cat", output: "cat.png",
-      params: { model: "gemini-3.1-flash-image-preview" },
+      params: { model: "gemini-3.1-flash-image" },
       outputFormat: "png", refusalReason: null, thoughtSignature: "sig-abc",
     };
     const actual = gen.buildContinuationRequestFromMaterials(
@@ -297,7 +297,7 @@ test("golden: request-continue-with-region.json (--region composes into current 
     });
     const priorEntry = {
       id: "cat-abc12345", prompt: "cat", output: "cat.png",
-      params: { model: "gemini-3.1-flash-image-preview" },
+      params: { model: "gemini-3.1-flash-image" },
       outputFormat: "png", refusalReason: null, thoughtSignature: "sig-abc",
     };
     const actual = gen.buildContinuationRequestFromMaterials(
@@ -426,11 +426,11 @@ test("E_CONTINUE_MISSING_OUTPUT when output file on disk is missing", () => {
 test("model mismatch: continuation proceeds + emits pinned stderr warning", () => {
   const dir = makeScratchCwd("fixture-history-continuable.jsonl");
   try {
-    // Prior entry is recorded under "gemini-3.1-flash-image-preview";
+    // Prior entry is recorded under "gemini-3.1-flash-image";
     // specify a different model on the current turn.
     const res = spawnSync(process.execPath, [CLI,
       "--history-continue", "cat-abc12345",
-      "--model", "gemini-3-pro-image-preview",
+      "--model", "gemini-3-pro-image",
       "--prompt", "upscale",
       "--output", "out.png",
       "--dry-run",
@@ -440,7 +440,7 @@ test("model mismatch: continuation proceeds + emits pinned stderr warning", () =
       encoding: "utf8",
     });
     assert.equal(res.status, 0, `stdout=${res.stdout} stderr=${res.stderr}`);
-    const expectedWarning = 'nanogen: --history-continue source used model "gemini-3.1-flash-image-preview"; continuing with model "gemini-3-pro-image-preview". Gemini may 400 on thoughtSignature format mismatch.';
+    const expectedWarning = 'nanogen: --history-continue source used model "gemini-3.1-flash-image"; continuing with model "gemini-3-pro-image". Gemini may 400 on thoughtSignature format mismatch.';
     assert.ok(
       res.stderr.includes(expectedWarning),
       `stderr must include pinned warning; got: ${JSON.stringify(res.stderr)}`
@@ -469,7 +469,7 @@ test("E_CONTINUE_UNKNOWN_MIME when outputFormat missing and bytes aren't PNG/JPE
       prompt: "p",
       output: "garbage.bin",
       params: {
-        model: "gemini-3.1-flash-image-preview",
+        model: "gemini-3.1-flash-image",
         aspectRatio: "1:1", imageSize: "1K",
         thinkingLevel: null, seed: null, temperature: null, styles: [],
       },
@@ -611,7 +611,7 @@ test("magic-byte fallback: outputFormat=null but bytes are PNG → continuation 
       prompt: "cat",
       output: "cat.png",
       params: {
-        model: "gemini-3.1-flash-image-preview",
+        model: "gemini-3.1-flash-image",
         aspectRatio: "1:1", imageSize: "1K",
         thinkingLevel: null, seed: null, temperature: null, styles: [],
       },

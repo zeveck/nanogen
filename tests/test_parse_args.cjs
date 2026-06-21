@@ -271,7 +271,7 @@ test("rule 7: E_BAD_SIZE for lowercase '1k'", () => {
 test("rule 8: E_SIZE_MODEL_MISMATCH for --size 512 with non-flash-3.1 model", () => {
   const res = runCLI([
     "--prompt", "X", "--output", "foo.png",
-    "--model", "gemini-3-pro-image-preview",
+    "--model", "gemini-3-pro-image",
     "--size", "512",
     "--dry-run",
   ]);
@@ -292,7 +292,7 @@ test("rule 9: E_BAD_THINKING for unknown --thinking", () => {
 test("rule 10: E_THINKING_MODEL_MISMATCH for --thinking minimal on non-flash", () => {
   const res = runCLI([
     "--prompt", "X", "--output", "foo.png",
-    "--model", "gemini-3-pro-image-preview",
+    "--model", "gemini-3-pro-image",
     "--thinking", "minimal",
     "--dry-run",
   ]);
@@ -435,7 +435,7 @@ test("--dry-run with styles, negative, safety, and image succeeds", () => {
   const res = runCLI([
     "--prompt", "A test prompt",
     "--output", "out.png",
-    "--model", "gemini-3.1-flash-image-preview",
+    "--model", "gemini-3.1-flash-image",
     "--aspect", "16:9",
     "--size", "2K",
     "--thinking", "medium",
@@ -466,6 +466,48 @@ test("--dry-run succeeds with empty GEMINI_API_KEY", () => {
     `stdout=${res.stdout} stderr=${res.stderr}`);
   const j = parseStdoutJson(res.stdout);
   assert.equal(j.dryRun, true);
+});
+
+// Model aliases + default resolve to the canonical GA model ids in the
+// request URL. The preview->GA migration changed every alias target and the
+// default; without this guard a typo in MODEL_ALIASES / DEFAULT_MODEL would
+// pass the entire suite (the goldens pin the default, but no test exercised
+// the alias map or full-name passthrough).
+test("model aliases + default resolve to GA ids in the request URL", () => {
+  const modelFromUrl = (url) => {
+    const m = /\/models\/([^:]+):generateContent/.exec(url || "");
+    return m && m[1];
+  };
+  const cases = [
+    { model: undefined,            expect: "gemini-3.1-flash-image" }, // default
+    { model: "flash",              expect: "gemini-3.1-flash-image" },
+    { model: "pro",                expect: "gemini-3-pro-image" },
+    { model: "flash-stable",       expect: "gemini-2.5-flash-image" },
+    { model: "gemini-3-pro-image", expect: "gemini-3-pro-image" },     // full-name passthrough
+  ];
+  for (const c of cases) {
+    const argv = ["--prompt", "x", "--output", "o.png", "--dry-run"];
+    if (c.model !== undefined) argv.push("--model", c.model);
+    const res = runCLI(argv, { env: cleanEnv({ GEMINI_API_KEY: "" }) });
+    assert.equal(res.status, 0,
+      `--model ${c.model} should succeed; stdout=${res.stdout} stderr=${res.stderr}`);
+    const j = parseStdoutJson(res.stdout);
+    assert.equal(modelFromUrl(j.url), c.expect,
+      `--model ${c.model} should resolve to ${c.expect}; url=${j.url}`);
+  }
+});
+
+// NANOGEN_MODEL env override flows through alias resolution when --model is
+// unset (documented .env workflow: set NANOGEN_MODEL=pro once).
+test("NANOGEN_MODEL=pro env override resolves to gemini-3-pro-image", () => {
+  const res = runCLI(
+    ["--prompt", "x", "--output", "o.png", "--dry-run"],
+    { env: cleanEnv({ GEMINI_API_KEY: "", NANOGEN_MODEL: "pro" }) }
+  );
+  assert.equal(res.status, 0, `stdout=${res.stdout} stderr=${res.stderr}`);
+  const j = parseStdoutJson(res.stdout);
+  assert.ok(/\/models\/gemini-3-pro-image:generateContent/.test(j.url),
+    `NANOGEN_MODEL=pro must resolve to GA pro id; url=${j.url}`);
 });
 
 // Stderr warning: duplicate --safety category

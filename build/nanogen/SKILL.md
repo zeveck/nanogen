@@ -145,7 +145,7 @@ Rules for `<ext>` — important for Gemini's real output behavior:
 
 ### Model / aspect / size defaults
 
-Default model is **Flash** (`gemini-3.1-flash-image-preview`, alias
+Default model is **Flash** (`gemini-3.1-flash-image`, alias
 `flash`) — $0.067 / 1K image. Pro (`--model pro`) costs 2× ($0.134) and
 produces a small visible quality gain on fluffy / vector / fringe-sensitive
 subjects; for most use cases Flash is fine. Users who want Pro everywhere
@@ -166,8 +166,8 @@ have?", run `nanogen --list-models` and report the approved set.
 | Effects | `flash` | 1:1 | 1K | `speculative-niche`, `flat-vector` |
 
 Pass aliases verbatim to `--model`: `--model pro` / `--model flash` /
-`--model flash-stable`. The CLI resolves to the full preview-model name.
-For one-off pinning, full names (`gemini-3.1-flash-image-preview` etc.)
+`--model flash-stable`. The CLI resolves the alias to the full model name.
+For one-off pinning, full names (`gemini-3.1-flash-image` etc.)
 also work. Run `nanogen --list-models` to see all models the key approves
 and which alias each maps to.
 
@@ -299,7 +299,7 @@ One-line recovery hints. Longer root-cause paragraphs live in
 | `E_MISSING_PROMPT_OR_IMAGE` | Add `--prompt "..."` or `--image <path>`. |
 | `E_EDIT_NEEDS_INSTRUCTION` | With `--image`, add `--prompt` or `--region`. |
 | `E_BAD_OUTPUT_EXT` | Use `.png`, `.jpg`, `.jpeg`, or `.webp`. |
-| `E_UNKNOWN_MODEL` | Pick `gemini-3.1-flash-image-preview`, `gemini-3-pro-image-preview`, or `gemini-2.5-flash-image`. |
+| `E_UNKNOWN_MODEL` | Pick `gemini-3.1-flash-image`, `gemini-3-pro-image`, or `gemini-2.5-flash-image`. |
 | `E_BAD_ASPECT` | Use one of the 14 valid ratios (`1:1`, `16:9`, `4:3`, `3:4`, `2:3`, `3:2`, `4:5`, `5:4`, `9:16`, `21:9`, `1:4`, `4:1`, `1:8`, `8:1`). |
 | `E_BAD_SIZE` | Use `512`, `1K`, `2K`, or `4K` (uppercase `K`). |
 | `E_SIZE_MODEL_MISMATCH` | `512` is flash-3.1 only; drop `--size 512` or switch model. |
@@ -395,12 +395,12 @@ mismatch — if it does, re-run with the original model.
 
 | Model | Size | $/image |
 |---|---|---|
-| `gemini-3-pro-image-preview` | 1K / 2K | $0.134 |
-| `gemini-3-pro-image-preview` | 4K | $0.24 |
-| `gemini-3.1-flash-image-preview` | 512 | $0.022 |
-| `gemini-3.1-flash-image-preview` | 1K | $0.034 |
-| `gemini-3.1-flash-image-preview` | 2K | $0.050 |
-| `gemini-3.1-flash-image-preview` | 4K | $0.076 |
+| `gemini-3-pro-image` | 1K / 2K | $0.134 |
+| `gemini-3-pro-image` | 4K | $0.24 |
+| `gemini-3.1-flash-image` | 512 | $0.022 |
+| `gemini-3.1-flash-image` | 1K | $0.034 |
+| `gemini-3.1-flash-image` | 2K | $0.050 |
+| `gemini-3.1-flash-image` | 4K | $0.076 |
 
 Rule of thumb: 10 images at pro-4K is ≈ $2.40. Favor flash-3.1 at
 1K for iteration; escalate to pro for finals or text-heavy output.

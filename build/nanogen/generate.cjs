@@ -15,8 +15,8 @@ const magicBytes = require("./magicBytes.cjs");
 // ---------------------------------------------------------------------------
 
 const VALID_MODELS = [
-  "gemini-3.1-flash-image-preview",
-  "gemini-3-pro-image-preview",
+  "gemini-3.1-flash-image",
+  "gemini-3-pro-image",
   "gemini-2.5-flash-image",
 ];
 // Symbolic aliases — resolved to a full model name at validate-time. Anthropic
@@ -25,9 +25,9 @@ const VALID_MODELS = [
 // Google ships a new image-gen model, update MODEL_ALIASES (and bump
 // VALID_MODELS) in one place; --model accepts either an alias or a full name.
 const MODEL_ALIASES = {
-  "pro":          "gemini-3-pro-image-preview",    // Nano Banana Pro (preview)
-  "flash":        "gemini-3.1-flash-image-preview", // Nano Banana 2 (preview)
-  "flash-stable": "gemini-2.5-flash-image",         // Nano Banana (GA)
+  "pro":          "gemini-3-pro-image",     // Nano Banana Pro (GA)
+  "flash":        "gemini-3.1-flash-image", // Nano Banana 2 (GA)
+  "flash-stable": "gemini-2.5-flash-image", // Nano Banana (GA, sunset 2026-10-02)
 };
 // Default model = Nano Banana 2 (Flash). Flash is 2× cheaper than Pro at 1K
 // ($0.067 vs $0.134 / image) and 3.4× cheaper than the GA Flash-stable model.
@@ -35,8 +35,8 @@ const MODEL_ALIASES = {
 // edge on fringe / vector / fluffy-subject chroma-key fidelity but the
 // visible difference is marginal. Users who want the Pro upgrade pass
 // --model pro per call or set NANOGEN_MODEL=pro in their .env.
-const DEFAULT_MODEL = "gemini-3.1-flash-image-preview";
-const FLASH_MODEL = "gemini-3.1-flash-image-preview";  // legacy --size 512 / --thinking minimal gate
+const DEFAULT_MODEL = "gemini-3.1-flash-image";
+const FLASH_MODEL = "gemini-3.1-flash-image";  // legacy --size 512 / --thinking minimal gate
 
 // Resolve an alias to its full model name. Pass-through for full names.
 // Returns null for unknown aliases / non-VALID_MODELS names — caller emits
@@ -2581,7 +2581,7 @@ function main() {
 // nanogen's default. Output shape:
 //   {
 //     success: true,
-//     default: "gemini-3-pro-image-preview",
+//     default: "gemini-3-pro-image",
 //     envOverride: "<NANOGEN_MODEL value or null>",
 //     models: [
 //       {name, displayName, aliases: [...], inNanogenValidSet: bool, isDefault: bool},
@@ -2622,7 +2622,7 @@ async function listModelsFlow() {
     return 1;
   }
   // Build reverse-alias index so each model name can list the aliases that
-  // point at it (e.g. gemini-3-pro-image-preview ← ["pro"]).
+  // point at it (e.g. gemini-3-pro-image ← ["pro"]).
   const aliasesOf = {};
   for (const [alias, target] of Object.entries(MODEL_ALIASES)) {
     if (!aliasesOf[target]) aliasesOf[target] = [];

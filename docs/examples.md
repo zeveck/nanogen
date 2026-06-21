@@ -52,7 +52,7 @@ nanogen --prompt "a single red apple on a white marble table" \
 
 | | |
 |---|---|
-| Default model | `gemini-3.1-flash-image-preview` |
+| Default model | `gemini-3.1-flash-image` |
 | Default aspect | `1:1` |
 | Default size | `1K` |
 | Cost | $0.034 |
@@ -60,7 +60,7 @@ nanogen --prompt "a single red apple on a white marble table" \
 **What you get back** (on stdout): one JSON line.
 
 ```json
-{"success":true,"output":"apple.png","historyId":"apple-f9c4a2b1","bytes":469308,"model":"gemini-3.1-flash-image-preview","aspectRatio":"1:1","imageSize":"1K","refusalReason":null}
+{"success":true,"output":"apple.png","historyId":"apple-f9c4a2b1","bytes":469308,"model":"gemini-3.1-flash-image","aspectRatio":"1:1","imageSize":"1K","refusalReason":null}
 ```
 
 **What's on disk:** `apple.png` plus an append to
@@ -194,7 +194,7 @@ nanogen --prompt "a red dot on a white background" \
 
 Cross-model rules the validator enforces:
 - `--thinking minimal` requires a Flash model
-- `--size 512` requires `gemini-3.1-flash-image-preview`
+- `--size 512` requires `gemini-3.1-flash-image`
 
 ---
 
@@ -254,14 +254,14 @@ Duplicate category → last wins; stderr warning fires once.
 
 | Model ID | Tier | Use when |
 |---|---|---|
-| `gemini-3.1-flash-image-preview` | Flash (default) | General gen + edit, iterative work, most prompts |
-| `gemini-3-pro-image-preview` | Pro | Text-in-image, 4K output, complex multi-object scenes, reliability matters |
+| `gemini-3.1-flash-image` | Flash (default) | General gen + edit, iterative work, most prompts |
+| `gemini-3-pro-image` | Pro | Text-in-image, 4K output, complex multi-object scenes, reliability matters |
 | `gemini-2.5-flash-image` | GA legacy | Budget fallback ONLY. **Shutdown 2026-10-02.** Avoid for new work. |
 
 ```bash
 # Pro at 4K for a wall print
 nanogen --prompt "a minimalist geometric pattern in navy and gold" \
-        --model gemini-3-pro-image-preview --size 4K --aspect 3:2 \
+        --model gemini-3-pro-image --size 4K --aspect 3:2 \
         --output print.png
 
 # Budget fallback (will stop working in October)
@@ -283,7 +283,7 @@ the literal string in the prompt.**
 
 ```bash
 nanogen --prompt "a vintage French coffee-shop chalkboard sign reading 'CAFÉ DU MATIN — OUVERT'" \
-        --model gemini-3-pro-image-preview \
+        --model gemini-3-pro-image \
         --size 2K --thinking high \
         --output sign.png
 ```
@@ -545,7 +545,7 @@ Output (one JSON line, pretty-printed here):
 ```json
 {
   "dryRun": true,
-  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+  "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent",
   "headers": {
     "x-goog-api-key": "<redacted>",
     "Content-Type": "application/json"
