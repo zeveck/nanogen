@@ -17,7 +17,6 @@ const magicBytes = require("./magicBytes.cjs");
 const VALID_MODELS = [
   "gemini-3.1-flash-image",
   "gemini-3-pro-image",
-  "gemini-2.5-flash-image",
 ];
 // Symbolic aliases — resolved to a full model name at validate-time. Anthropic
 // Claude Code, Aider, and Cursor all converge on this UX: callers say "pro" or
@@ -25,12 +24,11 @@ const VALID_MODELS = [
 // Google ships a new image-gen model, update MODEL_ALIASES (and bump
 // VALID_MODELS) in one place; --model accepts either an alias or a full name.
 const MODEL_ALIASES = {
-  "pro":          "gemini-3-pro-image",     // Nano Banana Pro (GA)
-  "flash":        "gemini-3.1-flash-image", // Nano Banana 2 (GA)
-  "flash-stable": "gemini-2.5-flash-image", // Nano Banana (GA, sunset 2026-10-02)
+  "pro":   "gemini-3-pro-image",     // Nano Banana Pro (GA)
+  "flash": "gemini-3.1-flash-image", // Nano Banana 2 (GA)
 };
 // Default model = Nano Banana 2 (Flash). Flash is 2× cheaper than Pro at 1K
-// ($0.067 vs $0.134 / image) and 3.4× cheaper than the GA Flash-stable model.
+// ($0.067 vs $0.134 / image).
 // Real-world image quality is comparable for most subjects; Pro shows a small
 // edge on fringe / vector / fluffy-subject chroma-key fidelity but the
 // visible difference is marginal. Users who want the Pro upgrade pass

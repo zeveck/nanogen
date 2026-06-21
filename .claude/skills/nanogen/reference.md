@@ -399,7 +399,6 @@ transition; verified 2026-06-19) (USD):
 | `gemini-3.1-flash-image` | 1K | $0.034 |
 | `gemini-3.1-flash-image` | 2K | $0.050 |
 | `gemini-3.1-flash-image` | 4K | $0.076 |
-| `gemini-2.5-flash-image` (GA; shutdown 2026-10-02) | 1024 | $0.039 |
 
 Batch API (not used by this CLI): 50% off output tokens, 24h
 turnaround.
@@ -430,10 +429,9 @@ SKILL.md's table.
 - **E_BAD_OUTPUT_EXT** — `--output` must end in `.png`, `.jpg`,
   `.jpeg`, or `.webp`. The CLI uses the extension to pick the
   `responseMimeType`.
-- **E_UNKNOWN_MODEL** — `--model` is not one of the three
-  supported ids (or the `pro` / `flash` / `flash-stable`
-  aliases). Model names change across GA rollouts; check
-  `--help` output.
+- **E_UNKNOWN_MODEL** — `--model` is not one of the two
+  supported ids (or the `pro` / `flash` aliases). Model names
+  change across GA rollouts; check `--help` output.
 - **E_BAD_ASPECT** — Aspect ratio not one of the 14 valid
   strings. Gemini will reject anything else server-side, so the
   CLI guards client-side.
@@ -441,8 +439,7 @@ SKILL.md's table.
   with the literal capital `K`. `"1k"` (lowercase) is rejected
   so config drift doesn't silently fall through to the API.
 - **E_SIZE_MODEL_MISMATCH** — `512` is flash-3.1 only. The pro
-  model has no 512 option; the 2.5 GA flash model has no 512
-  option.
+  model has no 512 option.
 - **E_BAD_THINKING** — `--thinking` must be `low`, `medium`,
   `high`, or `minimal`.
 - **E_THINKING_MODEL_MISMATCH** — `minimal` is flash-3.1 only.
@@ -691,8 +688,7 @@ flagging:
    "almost-text".
 4. **Model lineups change on a deprecation clock.** The
    `gemini-3.x` image models went GA on 2026-05-28; the older
-   `-preview` ids shut down 2026-06-25, and `gemini-2.5-flash-image`
-   is scheduled for shutdown 2026-10-02. Response shape, pricing,
+   `-preview` ids shut down 2026-06-25. Response shape, pricing,
    and availability may change across rollouts. The CLI logs
    unknown response parts rather than crashing, so a new part type
    surfaces as a warning rather than an outage.

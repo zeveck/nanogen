@@ -482,7 +482,6 @@ test("model aliases + default resolve to GA ids in the request URL", () => {
     { model: undefined,            expect: "gemini-3.1-flash-image" }, // default
     { model: "flash",              expect: "gemini-3.1-flash-image" },
     { model: "pro",                expect: "gemini-3-pro-image" },
-    { model: "flash-stable",       expect: "gemini-2.5-flash-image" },
     { model: "gemini-3-pro-image", expect: "gemini-3-pro-image" },     // full-name passthrough
   ];
   for (const c of cases) {
