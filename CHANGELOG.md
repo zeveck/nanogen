@@ -22,6 +22,9 @@ unchanged.
   `.claude/skills/nanogen` folder no longer resolve. The manual install in the
   README uses the new path and now lists every file the CLI needs, including
   `vendor/jpeg-decoder.js`.
+- `SKILL.md` gives the API key setup steps inline, since the repo's
+  `reports/` folder isn't part of an install.
+- Added the MIT `LICENSE` file the README already described.
 - New `--version` flag prints just the version, `--help` shows it, and every
   JSON result, error, and history entry carries a `nanogenVersion` field.
 - Dev container refreshed to the shared zeveck template (persisted agent
