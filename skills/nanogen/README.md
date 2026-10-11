@@ -46,17 +46,20 @@ and multi-turn continuation patterns.
 | `--history-continue <id>` | string | — | Continue a prior generation as a multi-turn edit. Round-trips the prior `thoughtSignature`. Mutually exclusive with `--history-parent`. See [Multi-turn continuation](#multi-turn-continuation). |
 | `--no-history` | flag | false | Skip `.nanogen-history.jsonl` append. |
 | `--dry-run` | flag | false | Print would-be request body as JSON and exit 0. Does NOT require a key. |
-| `--help, -h` | flag | — | Print help and exit 0. |
+| `--help, -h` | flag | — | Print help (including the nanogen version) and exit 0. |
+| `--version` | flag | — | Print just the nanogen version and exit 0. |
 
 ## Output contract
 
 Every invocation writes **exactly one JSON line** to stdout:
 
-- Success: `{"success":true,"output":"...","historyId":"...","bytes":N,"model":"...","aspectRatio":"...","imageSize":"...","refusalReason":null}`
-- Refusal: `{"success":false,"code":"E_REFUSED","error":"<reason>","refusalDetails":{...}}`
-- Validation / transport error: `{"success":false,"code":"E_...","error":"..."}`
+- Success: `{"nanogenVersion":"2026.10.11","success":true,"output":"...","historyId":"...","bytes":N,"model":"...","aspectRatio":"...","imageSize":"...","refusalReason":null}`
+- Refusal: `{"nanogenVersion":"2026.10.11","success":false,"code":"E_REFUSED","error":"<reason>","refusalDetails":{...}}`
+- Validation / transport error: `{"nanogenVersion":"2026.10.11","success":false,"code":"E_...","error":"..."}`
 
-`--help` is the sole exception (free-form text, exit 0).
+Every JSON result and error carries `nanogenVersion` (the CLI release, e.g.
+`2026.10.11`). `--help` (free-form text) and `--version` (just the version
+string) are the exceptions; both exit 0.
 
 When a history-write fails (EACCES/EROFS), the success JSON additionally
 carries `historyWarning: "<detail>"` — the invocation still succeeds.
@@ -71,6 +74,7 @@ lines so concurrent interleaves cannot corrupt the log.
 Schema (success):
 
     {
+      "nanogenVersion": "2026.10.11",  // CLI release that wrote the row
       "id": "apple-deadbeef",
       "timestamp": "2026-04-17T14:00:00.000Z",
       "prompt": "<composed prompt — what was actually sent>",

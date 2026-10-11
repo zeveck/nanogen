@@ -458,4 +458,30 @@ test("--dry-run reports shell env GEMINI_API_KEY → keySource env:GEMINI_API_KE
   assert.equal(j.keyPrefix, "shel");
 });
 
+// 16. Plugin-cache scenario: the CLI lives outside the project, and the user
+//     runs it from a project SUBFOLDER whose .env sits at the project root.
+//     The cwd-upward walk must find it (no NANOGEN_DOTENV_PATH pin).
+test("--dry-run from a project subfolder finds .env at the project root", () => {
+  const dir = mkTmp();
+  try {
+    const envFile = path.join(dir, ".env");
+    fs.writeFileSync(envFile, "GEMINI_API_KEY=root-env-key-value\n");
+    const sub = path.join(dir, "assets", "sprites");
+    fs.mkdirSync(sub, { recursive: true });
+    const r = spawnSync(
+      process.execPath,
+      [CLI, "--prompt", "test", "--output", "out.png", "--dry-run"],
+      { cwd: sub, env: cleanSubprocessEnv(), encoding: "utf8" }
+    );
+    assert.equal(r.status, 0, `stderr=${r.stderr}`);
+    const j = JSON.parse(r.stdout.trim());
+    assert.equal(j.keyResolved, true);
+    assert.ok(j.keySource.includes(fs.realpathSync(envFile)) || j.keySource.includes(envFile),
+      `keySource should name the project .env; got ${j.keySource}`);
+    assert.equal(j.keyPrefix, "root");
+  } finally {
+    rmTmp(dir);
+  }
+});
+
 runAll();

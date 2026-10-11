@@ -5,6 +5,11 @@
 
 "use strict";
 
+// Release version (CalVer YYYY.M.D). Keep in sync with package.json,
+// .claude-plugin/plugin.json, and the first "## v" heading in CHANGELOG.md
+// (tests/test_version.cjs enforces this).
+const NANOGEN_VERSION = "2026.10.11";
+
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -695,7 +700,7 @@ function printHelp() {
   const lines = [
     "Usage: nanogen --prompt \"<text>\" --output <path> [options]",
     "",
-    "Generate images via Google's Gemini Nano Banana models.",
+    "nanogen v" + NANOGEN_VERSION + " — generate images via Google's Gemini Nano Banana models.",
     "",
     "Required flags:",
     "  --prompt <str>           Text prompt. Required unless --image + (--region or explicit edit instruction) provided.",
@@ -762,6 +767,7 @@ function printHelp() {
     "                           is approved for. Prints JSON: full names,",
     "                           alias mappings, and which is nanogen's default.",
     "                           Ignores other flags. Requires GEMINI_API_KEY.",
+    "  --version                Print the nanogen version and exit.",
     "  --help, -h               Show this help.",
     "",
     "Examples:",
@@ -1721,6 +1727,7 @@ function buildHistoryEntry(args, composedPrompt, parsed, bytesWritten) {
     outputFormat = mimeToFmt[parsed.responseMimeType];
   }
   const entry = {
+    nanogenVersion: NANOGEN_VERSION,
     id: deriveHistoryId(args),
     timestamp: new Date().toISOString(),
     prompt: composedPrompt,
@@ -2440,6 +2447,7 @@ async function retryGenerateOnce(url, realHeaders, body, expectedMime, keyOpts) 
 
 function emitError(code, error) {
   process.stdout.write(JSON.stringify({
+    nanogenVersion: NANOGEN_VERSION,
     success: false,
     code,
     error,
@@ -2472,6 +2480,7 @@ function emitDryRun(url, headers, body) {
       };
   process.stdout.write(JSON.stringify(Object.assign({
     dryRun: true,
+    nanogenVersion: NANOGEN_VERSION,
     url,
     headers: redactedHeaders,
     body,
@@ -2484,6 +2493,11 @@ function emitDryRun(url, headers, body) {
 
 function main() {
   checkRuntime();
+
+  if (process.argv.slice(2).includes("--version")) {
+    process.stdout.write(NANOGEN_VERSION + "\n");
+    process.exit(0);
+  }
 
   // Phase 2: load + validate the style catalog BEFORE arg parsing so a
   // broken catalog fails deterministically regardless of user flags.
@@ -2645,6 +2659,7 @@ async function listModelsFlow() {
       };
     });
   const payload = {
+    nanogenVersion: NANOGEN_VERSION,
     success: true,
     default: DEFAULT_MODEL,
     envOverride: process.env.NANOGEN_MODEL || null,
@@ -2780,6 +2795,7 @@ async function runHttpFlow(args, stylesIndex) {
       if (r.warning) historyWarning = r.warning;
     }
     const payload = {
+      nanogenVersion: NANOGEN_VERSION,
       success: false,
       code: "E_REFUSED",
       error: parsed.refusalReason,
@@ -3001,6 +3017,7 @@ async function runHttpFlow(args, stylesIndex) {
   }
 
   const payload = {
+    nanogenVersion: NANOGEN_VERSION,
     success: true,
     output: actualPath,
     historyId: deriveHistoryId(args),
@@ -3023,6 +3040,7 @@ async function runHttpFlow(args, stylesIndex) {
 
 // Export for in-process testing.
 module.exports = {
+  NANOGEN_VERSION,
   parseArgs,
   validateArgs,
   readImageMaterials,
