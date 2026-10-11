@@ -6,5 +6,6 @@
   "homepage": "https://github.com/zeveck/nanogen",
   "repository": "https://github.com/zeveck/nanogen",
   "license": "MIT",
-  "keywords": ["image-generation", "gemini", "nano-banana", "image-editing", "style-presets", "transparency"]
+  "keywords": ["image-generation", "gemini", "nano-banana", "image-editing", "style-presets", "transparency"],
+  "skills": "./nanogen"
 }

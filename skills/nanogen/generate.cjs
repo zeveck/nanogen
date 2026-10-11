@@ -6,7 +6,7 @@
 "use strict";
 
 // Release version (CalVer YYYY.M.D). Keep in sync with package.json,
-// .claude-plugin/plugin.json, and the first "## v" heading in CHANGELOG.md
+// skills/.claude-plugin/plugin.json, and the first "## v" heading in CHANGELOG.md
 // (tests/test_version.cjs enforces this).
 const NANOGEN_VERSION = "2026.10.11";
 

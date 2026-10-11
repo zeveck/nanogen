@@ -23,7 +23,7 @@ test("version is date-based CalVer", () => {
 
 test("CLI version matches package.json, plugin.json and the first CHANGELOG heading", () => {
   assert.equal(readJson("package.json").version, NANOGEN_VERSION);
-  assert.equal(readJson(".claude-plugin/plugin.json").version, NANOGEN_VERSION);
+  assert.equal(readJson("skills/.claude-plugin/plugin.json").version, NANOGEN_VERSION);
   const changelog = fs.readFileSync(path.join(ROOT, "CHANGELOG.md"), "utf8");
   const first = changelog.match(/^## v(\S+)/m);
   assert.ok(first, 'CHANGELOG.md has a "## v" heading');
@@ -31,12 +31,17 @@ test("CLI version matches package.json, plugin.json and the first CHANGELOG head
 });
 
 test("marketplace and plugin manifests point at the skill", () => {
-  const plugin = readJson(".claude-plugin/plugin.json");
+  const plugin = readJson("skills/.claude-plugin/plugin.json");
   const market = readJson(".claude-plugin/marketplace.json");
   assert.equal(plugin.name, "nanogen");
   assert.equal(market.name, "nanogen");
-  assert.deepEqual(market.plugins.map((p) => [p.name, p.source]), [["nanogen", "."]]);
+  assert.deepEqual(market.plugins.map((p) => [p.name, p.source]), [["nanogen", "./skills"]]);
   assert.ok(fs.existsSync(path.join(ROOT, "skills/nanogen/SKILL.md")));
+  assert.equal(plugin.skills, "./nanogen");
+  // The plugin root is skills/, so only the skill ships, and the repo's
+  // CLAUDE.md stays out of it (claude plugin validate --strict warns on it).
+  assert.ok(!fs.existsSync(path.join(ROOT, "skills/CLAUDE.md")));
+  assert.ok(!fs.existsSync(path.join(ROOT, ".claude-plugin/plugin.json")));
   assert.ok(!fs.existsSync(path.join(ROOT, ".claude/skills/nanogen")), "skill moved to skills/nanogen");
   const skill = fs.readFileSync(path.join(ROOT, "skills/nanogen/SKILL.md"), "utf8");
   assert.ok(skill.includes("Bash(node ${CLAUDE_SKILL_DIR}/generate.cjs *)"));

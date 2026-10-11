@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "nanogen",
-      "source": ".",
+      "source": "./skills",
       "description": "Generate and edit images with Google's Nano Banana, with style presets, multi-image edits, and multi-turn refinement."
     }
   ]

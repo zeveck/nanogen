@@ -304,8 +304,8 @@ node .claude/skills/nanogen/generate.cjs \
 ```
 
 The examples use the manual-install path. With a plugin install the CLI lives
-in the plugin cache (`~/.claude/plugins/cache/nanogen/...`, under
-`skills/nanogen/generate.cjs`); in a clone of this repository it is
+in the plugin cache (`~/.claude/plugins/cache/nanogen/nanogen/<version>/nanogen/generate.cjs`);
+in a clone of this repository it is
 `skills/nanogen/generate.cjs`. A `.env` with your key is found from any
 subfolder of your project, wherever the CLI itself lives.
 
@@ -371,9 +371,11 @@ Sprite-sheet animation isn't supported — see
   generated mirror: edit `build/nanogen/` (the source of truth, which `npm test`
   exercises), then run `npm run sync-skill`. `tests/test_install_parity.cjs`
   fails if the two drift.
-- `.claude-plugin/` holds the plugin and marketplace manifests; `CHANGELOG.md`
+- The plugin is rooted at `skills/`, so an install copies only the skill:
+  `skills/.claude-plugin/plugin.json` is the plugin manifest and
+  `.claude-plugin/marketplace.json` the marketplace. `CHANGELOG.md`
   lists releases (date-based versions, e.g. `v2026.10.11`).
-- Try the plugin locally with `claude --plugin-dir .` from a clone.
+- Try the plugin locally with `claude --plugin-dir skills` from a clone.
 
 ## License
 

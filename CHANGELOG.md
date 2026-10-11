@@ -15,7 +15,8 @@ unchanged.
 
 - nanogen is now a Claude Code plugin with its own marketplace:
   `/plugin install nanogen --marketplace zeveck/nanogen`. Installed copies
-  update with `claude plugin update nanogen@nanogen`.
+  update with `claude plugin update nanogen@nanogen`. The plugin is rooted
+  at `skills/`, so an install copies only the skill, not the repository.
 - The skill moved from `.claude/skills/nanogen/` to `skills/nanogen/`, and its
   `SKILL.md` runs the bundled CLI through `${CLAUDE_SKILL_DIR}`, so it works
   from a plugin install or a copied folder. Links to the old
