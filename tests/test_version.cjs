@@ -42,6 +42,8 @@ test("marketplace and plugin manifests point at the skill", () => {
   // CLAUDE.md stays out of it (claude plugin validate --strict warns on it).
   assert.ok(!fs.existsSync(path.join(ROOT, "skills/CLAUDE.md")));
   assert.ok(!fs.existsSync(path.join(ROOT, ".claude-plugin/plugin.json")));
+  // Installs copy only skills/, so the license has to live there too.
+  assert.equal(fs.readFileSync(path.join(ROOT, "skills/LICENSE"), "utf8"), fs.readFileSync(path.join(ROOT, "LICENSE"), "utf8"));
   assert.ok(!fs.existsSync(path.join(ROOT, ".claude/skills/nanogen")), "skill moved to skills/nanogen");
   const skill = fs.readFileSync(path.join(ROOT, "skills/nanogen/SKILL.md"), "utf8");
   assert.ok(skill.includes("Bash(node ${CLAUDE_SKILL_DIR}/generate.cjs *)"));
