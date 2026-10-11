@@ -6,10 +6,10 @@ set in `/workspaces/nanogen/.env` — see
 [`reports/nanogen-api-key-setup.md`](../reports/nanogen-api-key-setup.md).
 
 CLI path is abbreviated as `nanogen` below; the real invocation is
-`node .claude/skills/nanogen/generate.cjs` (same for all examples).
+`node skills/nanogen/generate.cjs` (same for all examples).
 
 Cost column is per-call at the defaults unless noted. Prices are April
-2026 rates; see [`reference.md`](../.claude/skills/nanogen/reference.md)
+2026 rates; see [`reference.md`](../skills/nanogen/reference.md)
 for the full pricing table.
 
 ---
@@ -60,7 +60,7 @@ nanogen --prompt "a single red apple on a white marble table" \
 **What you get back** (on stdout): one JSON line.
 
 ```json
-{"success":true,"output":"apple.png","historyId":"apple-f9c4a2b1","bytes":469308,"model":"gemini-3.1-flash-image","aspectRatio":"1:1","imageSize":"1K","refusalReason":null}
+{"nanogenVersion":"2026.10.11","success":true,"output":"apple.png","historyId":"apple-f9c4a2b1","bytes":469308,"model":"gemini-3.1-flash-image","aspectRatio":"1:1","imageSize":"1K","refusalReason":null}
 ```
 
 **What's on disk:** `apple.png` plus an append to
@@ -76,7 +76,7 @@ key you'd use for `--history-continue` later.
 with:
 
 ```bash
-node -e 'const s=require("./.claude/skills/nanogen/styles.json"); for (const x of s) console.log(x.category.padEnd(22), x.slug)'
+node -e 'const s=require("./skills/nanogen/styles.json"); for (const x of s) console.log(x.category.padEnd(22), x.slug)'
 ```
 
 Single style:

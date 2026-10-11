@@ -8,6 +8,7 @@ description: >-
   10 categories. Requires GEMINI_API_KEY.
 argument-hint: "<prompt> [--style <slug>] [--image <path>] [--region <desc>] [--output <path>] [flags]"
 disable-model-invocation: false
+allowed-tools: "Bash(node ${CLAUDE_SKILL_DIR}/generate.cjs *), Bash(node */nanogen/generate.cjs *)"
 ---
 
 # /nanogen — Image generation and editing via Gemini Nano Banana
@@ -21,7 +22,7 @@ always safe and requires no API key.**
 Before any real invocation, verify:
 
 ```bash
-node .claude/skills/nanogen/generate.cjs \
+node ${CLAUDE_SKILL_DIR}/generate.cjs \
   --prompt preflight --output /tmp/nanogen-preflight.png --dry-run
 ```
 

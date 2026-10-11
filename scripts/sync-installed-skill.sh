@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Mirror the source-of-truth skill (build/nanogen/) into the installed
-# location (.claude/skills/nanogen/), excluding the dev-only tools/ dir.
+# location (skills/nanogen/), excluding the dev-only tools/ dir.
 #
 # build/nanogen/ is where the skill is developed and where `npm test` runs.
-# .claude/skills/nanogen/ is the copy Claude Code actually loads on /nanogen.
+# skills/nanogen/ is the copy Claude Code actually loads on /nanogen.
 # They must stay byte-identical (except tools/), enforced by
 # tests/test_install_parity.cjs. Run this whenever you change build/nanogen/.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 SRC="build/nanogen"
-DST=".claude/skills/nanogen"
+DST="skills/nanogen"
 
 if [ ! -d "$SRC" ]; then
   echo "sync-installed-skill: missing source dir $SRC" >&2

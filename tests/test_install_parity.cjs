@@ -1,6 +1,6 @@
 "use strict";
 // Installed-skill parity: build/nanogen/ (source of truth, where this suite
-// runs) must stay byte-identical to .claude/skills/nanogen/ (the copy Claude
+// runs) must stay byte-identical to skills/nanogen/ (the copy Claude
 // Code loads on /nanogen), EXCEPT the dev-only tools/ dir which never ships.
 //
 // Why this test exists: the install is a hand-copied mirror with no build
@@ -15,7 +15,7 @@ const path = require("node:path");
 
 const ROOT = path.resolve(__dirname, "..");
 const SRC = path.join(ROOT, "build", "nanogen");
-const DST = path.join(ROOT, ".claude", "skills", "nanogen");
+const DST = path.join(ROOT, "skills", "nanogen");
 
 // Directory names (relative to the skill root) that are dev-only and must NOT
 // be present in the installed copy.
@@ -76,7 +76,7 @@ test("every installed file is byte-identical to its build/ source", () => {
 test("dev-only tools/ is absent from the installed skill", () => {
   assert.ok(
     !fs.existsSync(path.join(DST, "tools")),
-    "tools/ is dev-only and must not exist in .claude/skills/nanogen/"
+    "tools/ is dev-only and must not exist in skills/nanogen/"
   );
 });
 
