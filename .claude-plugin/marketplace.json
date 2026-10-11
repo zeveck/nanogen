@@ -1,0 +1,14 @@
+{
+  "name": "nanogen",
+  "owner": {
+    "name": "zeveck"
+  },
+  "description": "nanogen: image generation and editing with Google's Nano Banana (Gemini image models).",
+  "plugins": [
+    {
+      "name": "nanogen",
+      "source": ".",
+      "description": "Generate and edit images with Google's Nano Banana, with style presets, multi-image edits, and multi-turn refinement."
+    }
+  ]
+}

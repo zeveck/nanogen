@@ -193,23 +193,53 @@ automatically — you just keep talking.
 
 ## Install
 
-You can probably just **ask your agent**: "install the nanogen skill
-from `github.com/zeveck/nanogen` into this project." It will follow the
-manual steps below.
+### Claude Code
 
-To do it yourself, drop the skill files into `.claude/skills/nanogen/`:
+Install nanogen as a Claude Code plugin (Claude Code 2.1.275 or later):
+
+```text
+/plugin install nanogen --marketplace zeveck/nanogen
+```
+
+Or in two steps, which also works on older versions:
+
+```text
+/plugin marketplace add zeveck/nanogen
+/plugin install nanogen@nanogen
+```
+
+The skill is then available as `/nanogen` (or `/nanogen:nanogen`). Update to a
+new release with:
 
 ```bash
-mkdir -p .claude/skills/nanogen
+claude plugin marketplace update nanogen
+claude plugin update nanogen@nanogen
+```
+
+then run `/reload-plugins` in any open session. The installed version is shown
+by `claude plugin list`, printed by `node <skill>/generate.cjs --version`, and
+recorded as `nanogenVersion` in every JSON result and every
+`.nanogen-history.jsonl` entry.
+
+Without the plugin system, copy the skill files from `skills/nanogen/` into
+`.claude/skills/nanogen/` in a project (or your user skills directory). Copies
+don't update; re-copy to upgrade. You can also just **ask your agent**:
+"install the nanogen skill from `github.com/zeveck/nanogen` into this
+project."
+
+```bash
+B=https://raw.githubusercontent.com/zeveck/nanogen/main/skills/nanogen
+mkdir -p .claude/skills/nanogen/vendor
 cd .claude/skills/nanogen
-for f in SKILL.md reference.md generate.cjs styles.json magicBytes.cjs; do
-  curl -O "https://raw.githubusercontent.com/zeveck/nanogen/main/.claude/skills/nanogen/$f"
+for f in SKILL.md reference.md generate.cjs styles.json magicBytes.cjs vendor/jpeg-decoder.js; do
+  curl -o "$f" "$B/$f"
 done
 ```
 
 Confirm:
 
 ```bash
+node .claude/skills/nanogen/generate.cjs --version
 node .claude/skills/nanogen/generate.cjs --help
 ```
 
@@ -273,6 +303,12 @@ node .claude/skills/nanogen/generate.cjs \
   --output apple-green.jpg
 ```
 
+The examples use the manual-install path. With a plugin install the CLI lives
+in the plugin cache (`~/.claude/plugins/cache/nanogen/...`, under
+`skills/nanogen/generate.cjs`); in a clone of this repository it is
+`skills/nanogen/generate.cjs`. A `.env` with your key is found from any
+subfolder of your project, wherever the CLI itself lives.
+
 `--dry-run` validates the request without an API call and reports
 whether a key would resolve.
 
@@ -325,9 +361,19 @@ Sprite-sheet animation isn't supported — see
 - Shape and spirit borrowed from [zeveck/imagegen](https://github.com/zeveck/imagegen).
 - Chroma-key pipeline ported from [zeveck/imagegen2](https://github.com/zeveck/imagegen2).
 - JPEG decoding via vendored [jpeg-js](https://github.com/eugeneware/jpeg-js)
-  (BSD-3-Clause + Apache-2.0, see `build/nanogen/vendor/`).
+  (BSD-3-Clause + Apache-2.0, see `skills/nanogen/vendor/`).
 - Uses [Google Gemini](https://ai.google.dev/gemini-api/docs/image-generation).
 - Built with [Claude Code](https://claude.com/claude-code).
+
+## Repository Layout
+
+- `skills/nanogen/` is the distributable skill (what the plugin ships). It is a
+  generated mirror: edit `build/nanogen/` (the source of truth, which `npm test`
+  exercises), then run `npm run sync-skill`. `tests/test_install_parity.cjs`
+  fails if the two drift.
+- `.claude-plugin/` holds the plugin and marketplace manifests; `CHANGELOG.md`
+  lists releases (date-based versions, e.g. `v2026.10.11`).
+- Try the plugin locally with `claude --plugin-dir .` from a clone.
 
 ## License
 
