@@ -230,9 +230,9 @@ project."
 ```bash
 B=https://raw.githubusercontent.com/zeveck/nanogen/main/skills/nanogen
 mkdir -p .claude/skills/nanogen/vendor
-cd .claude/skills/nanogen
-for f in SKILL.md reference.md generate.cjs styles.json magicBytes.cjs vendor/jpeg-decoder.js; do
-  curl -o "$f" "$B/$f"
+for f in SKILL.md reference.md generate.cjs styles.json magicBytes.cjs \
+         vendor/jpeg-decoder.js vendor/jpeg-js.LICENSE; do
+  curl -fsSL -o ".claude/skills/nanogen/$f" "$B/$f"
 done
 ```
 
@@ -377,6 +377,6 @@ Sprite-sheet animation isn't supported — see
 
 ## License
 
-MIT for first-party code. Third-party vendored code keeps its
+MIT for first-party code (see [LICENSE](LICENSE)). Third-party vendored code keeps its
 upstream license — see `build/nanogen/vendor/jpeg-js.LICENSE` and
 the header of `build/nanogen/vendor/jpeg-decoder.js`.

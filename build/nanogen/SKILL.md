@@ -38,9 +38,12 @@ preview"). The skill layer inspects the JSON:
 - **`keyResolved: true`** → proceed. `keySource` tells you
   where the key came from (`env:GEMINI_API_KEY`, `env:GOOGLE_API_KEY`,
   or a `.env` path).
-- **`keyResolved: false`** → STOP. Point the user to
-  `reports/nanogen-api-key-setup.md`, which covers getting a key
-  and putting it in `.env` at the repo root.
+- **`keyResolved: false`** → STOP. Tell the user how to add a key:
+  1. Create a Gemini API key at <https://aistudio.google.com/app/apikey>.
+  2. Add `GEMINI_API_KEY=<key>` to a `.env` file at the project root
+     (or export `GEMINI_API_KEY` in the shell).
+  3. Re-run the request. More detail:
+     <https://github.com/zeveck/nanogen/blob/main/reports/nanogen-api-key-setup.md>.
 
 Do NOT use `printenv GEMINI_API_KEY` as the preflight — it ONLY
 reads shell-exported env vars and misses the documented setup
@@ -50,7 +53,7 @@ check.
 
 If the user gets stuck on `E_MISSING_API_KEY`, do not retry
 blindly — the CLI fails fast and gives no interactive prompt.
-Point them at the setup doc and wait for them to add the key.
+Point them at the steps above and wait for them to add the key.
 
 ## 1. Two modes
 
@@ -79,11 +82,11 @@ The catalog has **72 preset slugs** across **10 categories**:
 `pixel-art`, `flat-vector`, `painterly`, `drawing-ink`,
 `photographic`, `animation-cartoon`, `fine-art-historical`,
 `game-style`, `design-technical`, `speculative-niche`. See
-`reference.md` for the full catalog.
+`${CLAUDE_SKILL_DIR}/reference.md` for the full catalog.
 
 Rules:
 
-1. Skim the 10-category summary in `reference.md`.
+1. Skim the 10-category summary in `${CLAUDE_SKILL_DIR}/reference.md`.
 2. Match user intent to 1–3 relevant categories.
 3. Pick **1–2 style slugs** (rarely more — excessive stacking
    produces muddy output).
@@ -151,7 +154,7 @@ Default model is **Flash** (`gemini-3.1-flash-image`, alias
 produces a small visible quality gain on fluffy / vector / fringe-sensitive
 subjects; for most use cases Flash is fine. Users who want Pro everywhere
 can set `NANOGEN_MODEL=pro` in their `.env`. When asked "what models do I
-have?", run `nanogen --list-models` and report the approved set.
+have?", run `node ${CLAUDE_SKILL_DIR}/generate.cjs --list-models` and report the approved set.
 
 | Asset type | Default model | Default aspect | Default size | Style category hints |
 |---|---|---|---|---|
@@ -169,7 +172,7 @@ have?", run `nanogen --list-models` and report the approved set.
 Pass aliases verbatim to `--model`: `--model pro` / `--model flash`.
 The CLI resolves the alias to the full model name.
 For one-off pinning, full names (`gemini-3.1-flash-image` etc.)
-also work. Run `nanogen --list-models` to see all models the key approves
+also work. Run `node ${CLAUDE_SKILL_DIR}/generate.cjs --list-models` to see all models the key approves
 and which alias each maps to.
 
 Text-in-image rendered below 2K is frequently garbled; if the user
@@ -210,7 +213,7 @@ it out — JPEG-or-PNG response decoded, keyed, alpha-bled, and
 re-encoded as PNG. Output filename must end in `.png`.
 
 ```bash
-nanogen --prompt "pixel-art sprite of a goblin warrior" \
+node ${CLAUDE_SKILL_DIR}/generate.cjs --prompt "pixel-art sprite of a goblin warrior" \
         --style pixel-16bit --transparent --output goblin.png
 ```
 
@@ -290,7 +293,7 @@ refusal even when the user expects pixels; same recovery applies.
 ## 6. Error code reference
 
 One-line recovery hints. Longer root-cause paragraphs live in
-`reference.md`. Grouped by category.
+`${CLAUDE_SKILL_DIR}/reference.md`. Grouped by category.
 
 ### Arg validation
 
@@ -308,7 +311,7 @@ One-line recovery hints. Longer root-cause paragraphs live in
 | `E_THINKING_MODEL_MISMATCH` | `minimal` is flash-3.1 only. |
 | `E_BAD_SEED` | `--seed` must be an integer. |
 | `E_BAD_TEMP` | `--temperature` must be a finite number. |
-| `E_BAD_SAFETY_CAT` | See the valid `HARM_CATEGORY_*` list in `reference.md`. |
+| `E_BAD_SAFETY_CAT` | See the valid `HARM_CATEGORY_*` list in `${CLAUDE_SKILL_DIR}/reference.md`. |
 | `E_BAD_SAFETY_THRESHOLD` | Use `OFF`, `BLOCK_NONE`, `BLOCK_ONLY_HIGH`, `BLOCK_MEDIUM_AND_ABOVE`, or `BLOCK_LOW_AND_ABOVE`. |
 | `E_IMAGE_NOT_FOUND` | Check the `--image` path. |
 | `E_BAD_IMAGE_EXT` | Input must be `.png`, `.jpg`, `.jpeg`, or `.webp`. |
@@ -317,7 +320,7 @@ One-line recovery hints. Longer root-cause paragraphs live in
 | `E_IMAGE_MIME_MISMATCH` | File magic bytes disagree with extension — rename or re-export. |
 | `E_TOO_MANY_IMAGES` | Max 14 `--image` references per invocation. |
 | `E_UNKNOWN_FLAG` | Check the help output (`--help`) for valid flags. |
-| `E_UNKNOWN_STYLE` | Slug not in `styles.json`; see `reference.md` for the 72 slugs. |
+| `E_UNKNOWN_STYLE` | Slug not in `${CLAUDE_SKILL_DIR}/styles.json`; see `${CLAUDE_SKILL_DIR}/reference.md` for the 72 slugs. |
 | `E_REGION_WITHOUT_IMAGE` | `--region` requires `--image`. |
 | `E_TRANSPARENT_REQUIRES_PNG` | `--transparent` requires `--output` ending in `.png`. |
 | `E_TRANSPARENT_FLAGS_WITHOUT_TRANSPARENT` | `--chroma-key`/`--chroma-tolerance`/`--transparent-mode` need `--transparent`. |
@@ -335,8 +338,8 @@ One-line recovery hints. Longer root-cause paragraphs live in
 | Code | Recovery |
 |---|---|
 | `E_NODE_TOO_OLD` | Upgrade Node to >= 20.12. |
-| `E_MISSING_API_KEY` | `export GEMINI_API_KEY=...` — see the setup doc. |
-| `E_BAD_STYLES_CATALOG` | `styles.json` failed schema validation — reinstall the skill. |
+| `E_MISSING_API_KEY` | `export GEMINI_API_KEY=...` or add it to the project `.env` (see the key steps above). |
+| `E_BAD_STYLES_CATALOG` | `${CLAUDE_SKILL_DIR}/styles.json` failed schema validation — reinstall the skill. |
 | `E_STYLE_AUTHOR_POLICY` | A preset contains a trademarked-artist token — reinstall a clean catalog. |
 
 ### Continuation
@@ -420,17 +423,17 @@ identifiable as AI-generated.
 ## 10. Troubleshooting pointers
 
 When things go wrong, consult the matching section in
-`reference.md`:
+`${CLAUDE_SKILL_DIR}/reference.md`:
 
-- **Text in the image is garbled.** `reference.md` → "Known
+- **Text in the image is garbled.** `${CLAUDE_SKILL_DIR}/reference.md` → "Known
   gotchas" — upgrade to 2K+ with `--thinking high`.
-- **Model switching mid-conversation 400s.** `reference.md` →
+- **Model switching mid-conversation 400s.** `${CLAUDE_SKILL_DIR}/reference.md` →
   "Pinned stderr-warning strings" (the model-mismatch warning) +
   "Known gotchas" (thoughtSignature is per-model).
 - **The image has white bars / was centered in a non-square
-  canvas.** `reference.md` → "Aspect ratio guidance".
+  canvas.** `${CLAUDE_SKILL_DIR}/reference.md` → "Aspect ratio guidance".
 - **Region edit did the wrong part of the image.**
-  `reference.md` → Asset templates / region phrasing tips; Gemini
+  `${CLAUDE_SKILL_DIR}/reference.md` → Asset templates / region phrasing tips; Gemini
   has no bitmap mask, so prose must be spatially unambiguous.
-- **Refusals that feel over-broad.** `reference.md` → "Error code
+- **Refusals that feel over-broad.** `${CLAUDE_SKILL_DIR}/reference.md` → "Error code
   reference" (E_REFUSED / E_CONTENT_POLICY root causes).
