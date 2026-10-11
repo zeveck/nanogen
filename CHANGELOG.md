@@ -28,8 +28,9 @@ unchanged.
 - Added the MIT `LICENSE` file the README already described.
 - New `--version` flag prints just the version, `--help` shows it, and every
   JSON result, error, and history entry carries a `nanogenVersion` field.
-- Dev container refreshed to the shared zeveck template (persisted agent
-  state, `auth`/`dc` helpers). Generated or personal files (`.playwright/`,
+- Dev container refreshed to the shared zeveck template (agent history,
+  memory, settings, and plugins kept across rebuilds but not sign-ins,
+  `auth`/`dc` helpers). Generated or personal files (`.playwright/`,
   `.claude/skills/playwright-cli/`, `.claude/settings.local.json`) are no
   longer tracked.
 - Tests now check that the CLI version, `package.json`, plugin manifest, and
