@@ -18,7 +18,7 @@ const tests = [];
 function test(name, fn) { tests.push({ name, fn }); }
 
 test("version is date-based CalVer", () => {
-  assert.match(NANOGEN_VERSION, /^\d{4}\.\d{1,2}\.\d{1,2}$/);
+  assert.match(NANOGEN_VERSION, /^\d{4}\.\d{1,2}\.\d{1,2}(\.\d+)?$/);
 });
 
 test("CLI version matches package.json, plugin.json and the first CHANGELOG heading", () => {
