@@ -1,6 +1,6 @@
 {
   "name": "nanogen",
-  "version": "2026.10.11",
+  "version": "2026.11.1",
   "description": "Generate and edit images with Google's Nano Banana (Gemini image models) through a zero-dependency CLI: 72 style presets, multi-image edits, multi-turn refinement, and chroma-key transparency. Requires a GEMINI_API_KEY.",
   "author": { "name": "zeveck" },
   "homepage": "https://github.com/zeveck/nanogen",

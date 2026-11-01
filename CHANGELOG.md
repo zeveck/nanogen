@@ -7,6 +7,18 @@ so on (`v2026.10.11.2`).
 The running version is shown by `--help` and `--version`, and recorded as
 `nanogenVersion` in every JSON result and every `.nanogen-history.jsonl` entry.
 
+## v2026.11.1
+
+Fixes from a bug review ([#4](https://github.com/zeveck/nanogen/issues/4)):
+
+- `--history-continue` now continues from the newest history entry with that
+  id. Saving to the same path twice made two entries with one id, and the old
+  (sometimes refused) one was used.
+- Transparent images are recorded as PNG in the history, matching the file on
+  disk, so continuing from them sends the right image type.
+- `NANOGEN_MAX_RETRIES=0` now means one attempt with no retries.
+- `--help` names the right alias for the default model (`flash`).
+
 ## v2026.10.11
 
 First versioned release. Generation behavior, flags, and defaults are
