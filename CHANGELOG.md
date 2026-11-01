@@ -7,6 +7,15 @@ so on (`v2026.10.11.2`).
 The running version is shown by `--help` and `--version`, and recorded as
 `nanogenVersion` in every JSON result and every `.nanogen-history.jsonl` entry.
 
+## v2026.11.1.2
+
+Fixes from a second bug review ([#5](https://github.com/zeveck/nanogen/issues/5)):
+
+- `--history-continue` skips a newer refused attempt and continues from the
+  last good image. (A refusal saves no image, so the good one is still there.)
+- `--list-models` follows Gemini's paging, so models past the first page are
+  no longer left out.
+
 ## v2026.11.1
 
 Fixes from a bug review ([#4](https://github.com/zeveck/nanogen/issues/4)):
