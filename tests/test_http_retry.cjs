@@ -256,6 +256,22 @@ test("500 × 4 → E_UPSTREAM_5XX, attempts == 4", async () => {
   }
 });
 
+// 3b. NANOGEN_MAX_RETRIES=0 means one attempt, not the default 3 retries.
+test("NANOGEN_MAX_RETRIES=0 + 503 → single attempt, E_UPSTREAM_5XX", async () => {
+  const mock = await makeMock([
+    (req, res) => respondJson(res, 503, { error: "busy" }),
+  ]);
+  try {
+    const r = await runAgainstMock(mock, { NANOGEN_MAX_RETRIES: "0" });
+    assert.equal(r.status, 1);
+    const out = parseLastJsonLine(r.stdout);
+    assert.equal(out.code, "E_UPSTREAM_5XX");
+    assert.equal(mock.attempts, 1, `expected 1 attempt; got ${mock.attempts}`);
+  } finally {
+    await closeMock(mock);
+  }
+});
+
 // 4. 401 → no retry, E_AUTH, attempts == 1.
 test("401 → E_AUTH, attempts == 1", async () => {
   const mock = await makeMock([

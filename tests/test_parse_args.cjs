@@ -205,6 +205,14 @@ test("--help prints free-form help starting with 'Usage: nanogen ' (not JSON)", 
   assert.ok(res.stdout.includes("GEMINI_API_KEY"));
 });
 
+test("--help names the default model's own alias", () => {
+  const res = runCLI(["--help"]);
+  assert.equal(res.status, 0);
+  const line = res.stdout.split("\n").find((l) => l.includes("--model <id|alias>"));
+  assert.ok(line, "help must document --model");
+  assert.match(line, /Default: gemini-3\.1-flash-image \(alias: flash\)/);
+});
+
 test("-h alias prints help", () => {
   const res = runCLI(["-h"]);
   assert.equal(res.status, 0);

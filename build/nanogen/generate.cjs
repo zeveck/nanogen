@@ -707,7 +707,8 @@ function printHelp() {
     "  --output <path>          Output file path. Ext ∈ {.png,.jpg,.jpeg,.webp}.",
     "",
     "Optional flags:",
-    "  --model <id|alias>       Model id. Default: " + DEFAULT_MODEL + " (alias: pro).",
+    "  --model <id|alias>       Model id. Default: " + DEFAULT_MODEL +
+      " (alias: " + Object.keys(MODEL_ALIASES).filter((a) => MODEL_ALIASES[a] === DEFAULT_MODEL).join(", ") + ").",
     "                           Aliases: " + Object.keys(MODEL_ALIASES).map((a) => `${a}→${MODEL_ALIASES[a]}`).join(", "),
     "                           Full names: " + VALID_MODELS.join(", "),
     "                           Env override: NANOGEN_MODEL (also accepts aliases).",
@@ -1011,11 +1012,14 @@ function resolveContinuation(args, cwd) {
   // 2. Exact-match lookup. We deliberately do NOT prefix-match here
   // (unlike --history-parent): an ambiguous continuation would round-trip
   // the wrong thoughtSignature and the model would 400 in a confusing way.
+  // Ids derive from --output, so regenerating to the same path appends a
+  // second row with the same id. The LAST matching row is the one whose
+  // image is on disk now, so it wins (an earlier refusal or an older
+  // signature must not shadow it).
   let priorEntry = null;
   for (const e of entries) {
     if (e && typeof e.id === "string" && e.id === args.historyContinue) {
       priorEntry = e;
-      break;
     }
   }
   if (!priorEntry) {
@@ -1442,8 +1446,13 @@ function resolveApiKey() {
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503]);
 
 function getRetryConfig() {
+  // NANOGEN_MAX_RETRIES=0 is meaningful (one attempt, no retries), so it
+  // can't use the `|| default` shortcut the other two knobs use.
+  const maxRetries = Number(process.env.NANOGEN_MAX_RETRIES);
   return {
-    MAX_RETRIES: Number(process.env.NANOGEN_MAX_RETRIES) || 3,
+    MAX_RETRIES: process.env.NANOGEN_MAX_RETRIES &&
+                 Number.isInteger(maxRetries) && maxRetries >= 0
+      ? maxRetries : 3,
     BASE_DELAY_MS: Number(process.env.NANOGEN_RETRY_BASE_MS) || 1000,
     FETCH_TIMEOUT_MS: Number(process.env.NANOGEN_FETCH_TIMEOUT_MS) || 120000,
   };
@@ -1722,7 +1731,12 @@ function buildHistoryEntry(args, composedPrompt, parsed, bytesWritten) {
     "image/webp": "webp",
   };
   let outputFormat = null;
-  if (parsed && parsed.image && parsed.responseMimeType &&
+  if (parsed && parsed.image && args.transparent) {
+    // --transparent always re-encodes to PNG, whatever Gemini returned.
+    // Recording the source MIME here would make --history-continue send
+    // PNG bytes labelled image/jpeg.
+    outputFormat = "png";
+  } else if (parsed && parsed.image && parsed.responseMimeType &&
       mimeToFmt[parsed.responseMimeType]) {
     outputFormat = mimeToFmt[parsed.responseMimeType];
   }

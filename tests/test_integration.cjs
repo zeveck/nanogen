@@ -786,4 +786,66 @@ test("dry-run continuation: zero HTTP traffic; stdout is a 3-turn dryRun preview
   }
 });
 
+// 11. Regenerating to the same --output appends a second row with the same
+// id. --history-continue must use the LATEST row (the image on disk now),
+// not an earlier refusal that shares the id.
+test("continuation after refused-then-successful regen uses the latest row", async () => {
+  const mock = await makeMock([
+    (req, res) => respondJson(res, 200, refusalBody("IMAGE_SAFETY")),
+    (req, res) => respondJson(res, 200, successBody({ thoughtSignature: "sig-new" })),
+  ]);
+  const tmp = mkTmp();
+  try {
+    const env = { NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}` };
+    const r1 = await runCLI(["--prompt", "cat", "--output", "cat.png"], env, tmp);
+    assert.equal(r1.status, 1, `first run should refuse; stdout=${r1.stdout}`);
+    const r2 = await runCLI(["--prompt", "cat", "--output", "cat.png"], env, tmp);
+    assert.equal(r2.status, 0, `second run should succeed; stdout=${r2.stdout}`);
+    const id = parseLastJsonLine(r2.stdout).historyId;
+    assert.equal(readHistoryFile(tmp).filter((e) => e.id === id).length, 2);
+
+    const r3 = await runCLI(
+      ["--history-continue", id, "--prompt", "add a hat",
+       "--output", "hat.png", "--dry-run"], env, tmp);
+    assert.equal(r3.status, 0, `continuation must not hit the stale refusal; stdout=${r3.stdout}`);
+    const preview = JSON.parse(r3.stdout);
+    assert.equal(preview.body.contents[1].parts[0].thoughtSignature, "sig-new");
+  } finally {
+    await closeMock(mock);
+    rmTmp(tmp);
+  }
+});
+
+// 12. --transparent re-encodes Gemini's JPEG to PNG. History must say
+// "png" so a later --history-continue labels the bytes correctly.
+test("--transparent with JPEG response: history outputFormat png; continuation sends image/png", async () => {
+  const magentaJpeg = fs.readFileSync(
+    path.resolve(__dirname, "fixtures", "magenta-8x8.jpg")).toString("base64");
+  const mock = await makeMock([
+    (req, res) => respondJson(res, 200, successBody({
+      mimeType: "image/jpeg", data: magentaJpeg, thoughtSignature: "sig-t" })),
+  ]);
+  const tmp = mkTmp();
+  try {
+    const env = { NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}` };
+    const r = await runCLI(
+      ["--prompt", "sprite", "--transparent", "--output", "s.png"], env, tmp);
+    assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
+    const written = fs.readFileSync(path.join(tmp, "s.png"));
+    assert.equal(written.subarray(1, 4).toString("ascii"), "PNG");
+    const [row] = readHistoryFile(tmp);
+    assert.equal(row.outputFormat, "png");
+
+    const r2 = await runCLI(
+      ["--history-continue", row.id, "--prompt", "next",
+       "--output", "s2.png", "--dry-run"], env, tmp);
+    assert.equal(r2.status, 0, `stdout=${r2.stdout}`);
+    const preview = JSON.parse(r2.stdout);
+    assert.equal(preview.body.contents[1].parts[0].inlineData.mimeType, "image/png");
+  } finally {
+    await closeMock(mock);
+    rmTmp(tmp);
+  }
+});
+
 runAll();

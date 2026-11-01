@@ -630,7 +630,7 @@ configuration:
 | `NANOGEN_API_BASE` | Override the Gemini API base URL. Tests point at an in-process mock (`http://127.0.0.1:<port>`). |
 | `NANOGEN_RETRY_BASE_MS` | Base exponential-backoff delay in ms. Default 1000; tests set 5. |
 | `NANOGEN_FETCH_TIMEOUT_MS` | Per-attempt fetch timeout in ms. Default 120000. |
-| `NANOGEN_MAX_RETRIES` | Retry count. Default 3 (→ 4 total attempts). |
+| `NANOGEN_MAX_RETRIES` | Retry count. Default 3 (→ 4 total attempts); `0` makes a single attempt. |
 | `NANOGEN_DOTENV_PATH` | Pin `.env` resolution to a specific file; bypass the cwd/`__dirname` walker. Unset in production. Tests set it to a tempdir `.env` for hermetic isolation. Set to a nonexistent path to force the "no `.env` anywhere" path. |
 | `NANOGEN_STYLES_PATH` | Alternate path to a `styles.json` catalog. |
 
