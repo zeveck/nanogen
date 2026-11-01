@@ -848,4 +848,61 @@ test("--transparent with JPEG response: history outputFormat png; continuation s
   }
 });
 
+// 13. The reverse order of test 11: a good image, then a REFUSED regen to
+// the same --output. A refusal writes no file, so the good image and its
+// signature are still what's on disk. The refusal row is newest but must
+// not shadow the last successful row.
+test("continuation after successful-then-refused regen uses the last successful row", async () => {
+  const mock = await makeMock([
+    (req, res) => respondJson(res, 200, successBody({ thoughtSignature: "sig-good" })),
+    (req, res) => respondJson(res, 200, refusalBody("IMAGE_SAFETY")),
+  ]);
+  const tmp = mkTmp();
+  try {
+    const env = { NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}` };
+    const r1 = await runCLI(["--prompt", "cat", "--output", "cat.png"], env, tmp);
+    assert.equal(r1.status, 0, `first run should succeed; stdout=${r1.stdout}`);
+    const id = parseLastJsonLine(r1.stdout).historyId;
+    const r2 = await runCLI(["--prompt", "cat, edgier", "--output", "cat.png"], env, tmp);
+    assert.equal(r2.status, 1, `second run should refuse; stdout=${r2.stdout}`);
+    assert.equal(readHistoryFile(tmp).filter((e) => e.id === id).length, 2);
+
+    const r3 = await runCLI(
+      ["--history-continue", id, "--prompt", "add a hat",
+       "--output", "hat.png", "--dry-run"], env, tmp);
+    assert.equal(r3.status, 0, `continuation must skip the newer refusal; stdout=${r3.stdout}`);
+    const preview = JSON.parse(r3.stdout);
+    assert.equal(preview.body.contents[0].parts[0].text, "cat");
+    assert.equal(preview.body.contents[1].parts[0].thoughtSignature, "sig-good");
+  } finally {
+    await closeMock(mock);
+    rmTmp(tmp);
+  }
+});
+
+// 14. --list-models follows nextPageToken. models.list pages at 50 by
+// default; reading only page 1 dropped image models listed later.
+test("--list-models follows nextPageToken across pages", async () => {
+  const mock = await makeMock([
+    (req, res) => respondJson(res, 200, {
+      models: Array.from({ length: 50 }, (_, i) => ({ name: `models/gemini-text-${i}` })),
+      nextPageToken: "page-2",
+    }),
+    (req, res) => respondJson(res, 200, {
+      models: [{ name: "models/gemini-3.1-flash-image", displayName: "Nano Banana 2" }],
+    }),
+  ]);
+  try {
+    const env = { NANOGEN_API_BASE: `http://127.0.0.1:${mock.port}` };
+    const r = await runCLI(["--list-models"], env);
+    assert.equal(r.status, 0, `stdout=${r.stdout} stderr=${r.stderr}`);
+    const out = parseLastJsonLine(r.stdout);
+    assert.deepEqual(out.models.map((m) => m.name), ["gemini-3.1-flash-image"]);
+    assert.equal(mock.attempts, 2);
+    assert.match(mock.requests[1].url, /[?&]pageToken=page-2(&|$)/);
+  } finally {
+    await closeMock(mock);
+  }
+});
+
 runAll();

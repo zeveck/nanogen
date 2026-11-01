@@ -1013,15 +1013,24 @@ function resolveContinuation(args, cwd) {
   // (unlike --history-parent): an ambiguous continuation would round-trip
   // the wrong thoughtSignature and the model would 400 in a confusing way.
   // Ids derive from --output, so regenerating to the same path appends a
-  // second row with the same id. The LAST matching row is the one whose
-  // image is on disk now, so it wins (an earlier refusal or an older
-  // signature must not shadow it).
+  // second row with the same id. The LAST successful matching row is the
+  // one whose image is on disk now, so it wins: an earlier refusal or an
+  // older signature must not shadow it, and a later refusal (which writes
+  // no file) must not hide the image that is still there. Only when every
+  // matching row is a refusal do we keep the newest one, so step 3 reports
+  // E_CONTINUE_REFUSED_ENTRY.
   let priorEntry = null;
+  let newestRefused = null;
   for (const e of entries) {
     if (e && typeof e.id === "string" && e.id === args.historyContinue) {
-      priorEntry = e;
+      if (e.refusalReason !== null && e.refusalReason !== undefined) {
+        newestRefused = e;
+      } else {
+        priorEntry = e;
+      }
     }
   }
+  if (!priorEntry) priorEntry = newestRefused;
   if (!priorEntry) {
     return fail("E_CONTINUE_UNKNOWN_ID",
       `--history-continue id "${args.historyContinue}" not found in .nanogen-history.jsonl`);
@@ -2624,28 +2633,42 @@ async function listModelsFlow() {
   }
   const base = process.env.NANOGEN_API_BASE ||
                "https://generativelanguage.googleapis.com";
-  const url = `${base}/v1beta/models`;
-  let res;
-  try {
-    res = await fetchWithRetry(url, {
-      method: "GET",
-      headers: { "x-goog-api-key": resolved.key },
-    });
-  } catch (err) {
-    emitError("E_UNEXPECTED_HTTP",
-      "list-models HTTP error: " + (err && err.message || String(err)));
-    return 1;
-  }
-  if (res.status < 200 || res.status >= 300) {
-    const code = mapHttpError(res.status, res.bodyText || "");
-    emitError(code, `list-models HTTP ${res.status}`);
-    return 1;
-  }
-  let json;
-  try { json = JSON.parse(res.bodyText); }
-  catch (e) {
-    emitError("E_UNEXPECTED_HTTP", "list-models response unparseable");
-    return 1;
+  // models.list is paginated (50 per page unless pageSize is given) and
+  // returns nextPageToken while more remain. Reading only the first page
+  // silently dropped image models that sort later. Ask for the maximum
+  // page size and follow the token, with a page cap as a loop guard.
+  const allModels = [];
+  let pageToken = null;
+  for (let page = 0; page < 20; page++) {
+    const qs = new URLSearchParams({ pageSize: "1000" });
+    if (pageToken) qs.set("pageToken", pageToken);
+    const url = `${base}/v1beta/models?${qs}`;
+    let res;
+    try {
+      res = await fetchWithRetry(url, {
+        method: "GET",
+        headers: { "x-goog-api-key": resolved.key },
+      });
+    } catch (err) {
+      emitError("E_UNEXPECTED_HTTP",
+        "list-models HTTP error: " + (err && err.message || String(err)));
+      return 1;
+    }
+    if (res.status < 200 || res.status >= 300) {
+      const code = mapHttpError(res.status, res.bodyText || "");
+      emitError(code, `list-models HTTP ${res.status}`);
+      return 1;
+    }
+    let json;
+    try { json = JSON.parse(res.bodyText); }
+    catch (e) {
+      emitError("E_UNEXPECTED_HTTP", "list-models response unparseable");
+      return 1;
+    }
+    if (Array.isArray(json && json.models)) allModels.push(...json.models);
+    pageToken = json && typeof json.nextPageToken === "string" && json.nextPageToken
+      ? json.nextPageToken : null;
+    if (!pageToken) break;
   }
   // Build reverse-alias index so each model name can list the aliases that
   // point at it (e.g. gemini-3-pro-image ← ["pro"]).
@@ -2654,7 +2677,7 @@ async function listModelsFlow() {
     if (!aliasesOf[target]) aliasesOf[target] = [];
     aliasesOf[target].push(alias);
   }
-  const models = (json.models || [])
+  const models = allModels
     .filter((m) => {
       // Only image-generation models — name or displayName has "image".
       const name = (m.name || "").toLowerCase();
