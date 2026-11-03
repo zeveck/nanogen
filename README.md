@@ -3,8 +3,8 @@
 Generate and edit images via Google's Gemini / Nano Banana models, from
 [Claude Code](https://github.com/anthropics/claude-code) or a terminal.
 Style presets, natural-language edits, multi-image composition, and
-multi-turn refinement. Zero npm deps; just Node 20.12+ and a Gemini API
-key.
+multi-turn refinement. No npm packages to install; you need Node 20.12+
+and a Gemini API key.
 
 ---
 
