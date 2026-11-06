@@ -214,6 +214,7 @@ test("request-flash-minimal-512.json matches builder output", () => {
       baseArgs({
         prompt: "tiny sprite",
         output: "sprite.png",
+        model: "gemini-3.1-flash-image",  // the only model with 512
         size: "512",
         thinking: "minimal",
       }),
@@ -266,7 +267,7 @@ test("request-full-featured.json matches builder output with all flags set", () 
         model: "gemini-3.1-flash-image",
         aspect: "16:9",
         size: "2K",
-        thinking: "medium",
+        thinking: "high",
         seed: "1337",
         temperature: "0.5",
         styles: ["pixel-16bit", "oil-painting"],
@@ -304,7 +305,7 @@ test("NANOGEN_API_BASE override is respected by the pure builder", () => {
       stylesIndex
     );
     assert.equal(r.url,
-      "http://127.0.0.1:9999/v1beta/models/gemini-3.1-flash-image:generateContent");
+      "http://127.0.0.1:9999/v1beta/models/gemini-nano-banana-2.1:generateContent");
   });
 });
 
@@ -337,7 +338,7 @@ test("CLI --dry-run with all flags populated matches request-full-featured.json"
     "--model", "gemini-3.1-flash-image",
     "--aspect", "16:9",
     "--size", "2K",
-    "--thinking", "medium",
+    "--thinking", "high",
     "--seed", "1337",
     "--temperature", "0.5",
     "--style", "pixel-16bit",

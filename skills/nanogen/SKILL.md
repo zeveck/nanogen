@@ -149,10 +149,16 @@ Rules for `<ext>` — important for Gemini's real output behavior:
 
 ### Model / aspect / size defaults
 
-Default model is **Flash** (`gemini-3.1-flash-image`, alias
-`flash`) — $0.067 / 1K image. Pro (`--model pro`) costs 2× ($0.134) and
-produces a small visible quality gain on fluffy / vector / fringe-sensitive
-subjects; for most use cases Flash is fine. Users who want Pro everywhere
+Default model is **Nano Banana 2.1** (`gemini-nano-banana-2.1`, alias
+`flash`), Google's replacement for Nano Banana 2 (`gemini-3.1-flash-image`,
+deprecated 2026-10-06 but still served; pass it by full name). 2.1 takes
+1K/2K/4K (no 512) and thinking `minimal`, `medium` (its default) or
+`high`; `--thinking minimal` roughly halves its time. Pro (`--model pro`)
+produces a small visible quality gain on fluffy / vector /
+fringe-sensitive subjects; for most use cases 2.1 is fine. `--model lite`
+(`gemini-3.1-flash-lite-image`) is the fastest and cheapest, but weaker
+with several reference images and multi-turn edits, and its
+"solid background" can drift off the requested key color. Users who want Pro everywhere
 can set `NANOGEN_MODEL=pro` in their `.env`. When asked "what models do I
 have?", run `node ${CLAUDE_SKILL_DIR}/generate.cjs --list-models` and report the approved set.
 
@@ -171,7 +177,7 @@ have?", run `node ${CLAUDE_SKILL_DIR}/generate.cjs --list-models` and report the
 
 Pass aliases verbatim to `--model`: `--model pro` / `--model flash`.
 The CLI resolves the alias to the full model name.
-For one-off pinning, full names (`gemini-3.1-flash-image` etc.)
+For one-off pinning, full names (`gemini-nano-banana-2.1` etc.)
 also work. Run `node ${CLAUDE_SKILL_DIR}/generate.cjs --list-models` to see all models the key approves
 and which alias each maps to.
 
@@ -303,12 +309,12 @@ One-line recovery hints. Longer root-cause paragraphs live in
 | `E_MISSING_PROMPT_OR_IMAGE` | Add `--prompt "..."` or `--image <path>`. |
 | `E_EDIT_NEEDS_INSTRUCTION` | With `--image`, add `--prompt` or `--region`. |
 | `E_BAD_OUTPUT_EXT` | Use `.png`, `.jpg`, `.jpeg`, or `.webp`. |
-| `E_UNKNOWN_MODEL` | Pick `gemini-3.1-flash-image` or `gemini-3-pro-image` (aliases `flash` / `pro`). |
+| `E_UNKNOWN_MODEL` | Pick `gemini-nano-banana-2.1`, `gemini-3-pro-image`, `gemini-3.1-flash-lite-image` or `gemini-3.1-flash-image` (aliases `flash` / `pro` / `lite`). |
 | `E_BAD_ASPECT` | Use one of the 14 valid ratios (`1:1`, `16:9`, `4:3`, `3:4`, `2:3`, `3:2`, `4:5`, `5:4`, `9:16`, `21:9`, `1:4`, `4:1`, `1:8`, `8:1`). |
 | `E_BAD_SIZE` | Use `512`, `1K`, `2K`, or `4K` (uppercase `K`). |
-| `E_SIZE_MODEL_MISMATCH` | `512` is flash-3.1 only; drop `--size 512` or switch model. |
+| `E_SIZE_MODEL_MISMATCH` | `512` is `gemini-3.1-flash-image` only; drop `--size 512` or switch model. |
 | `E_BAD_THINKING` | Use `low`, `medium`, `high`, or `minimal`. |
-| `E_THINKING_MODEL_MISMATCH` | `minimal` is flash-3.1 only. |
+| `E_THINKING_MODEL_MISMATCH` | The error lists the levels that model takes (2.1: minimal/medium/high; Lite and 3.1 Flash: minimal/high; Pro: low/medium/high). |
 | `E_BAD_SEED` | `--seed` must be an integer. |
 | `E_BAD_TEMP` | `--temperature` must be a finite number. |
 | `E_BAD_SAFETY_CAT` | See the valid `HARM_CATEGORY_*` list in `${CLAUDE_SKILL_DIR}/reference.md`. |
@@ -406,8 +412,13 @@ mismatch — if it does, re-run with the original model.
 | `gemini-3.1-flash-image` | 2K | $0.050 |
 | `gemini-3.1-flash-image` | 4K | $0.076 |
 
-Rule of thumb: 10 images at pro-4K is ≈ $2.40. Favor flash-3.1 at
-1K for iteration; escalate to pro for finals or text-heavy output.
+`gemini-nano-banana-2.1` and `gemini-3.1-flash-lite-image` prices aren't
+listed here yet; check Google's pricing page. In testing, 2.1 returned
+about as many image tokens as 3.1 Flash at 1K, plus ~1,100 thinking tokens
+at its default `medium` thinking (none at `minimal`).
+
+Rule of thumb: 10 images at pro-4K is ≈ $2.40. Favor `flash` at 1K for
+iteration; escalate to pro for finals or text-heavy output.
 
 ## 9. SynthID
 

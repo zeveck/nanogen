@@ -31,10 +31,10 @@ and multi-turn continuation patterns.
 |------|------|---------|-------|
 | `--prompt <str>` | string | — | Required for generation. Optional for edit mode when `--image` and `--region` are supplied. |
 | `--output <path>` | string | — | Required. Ext in `{.png,.jpg,.jpeg,.webp}`. Parent dirs auto-created. |
-| `--model <id>` | string | `gemini-3.1-flash-image` | One of `gemini-3.1-flash-image`, `gemini-3-pro-image` (aliases `flash` / `pro`). |
+| `--model <id>` | string | `gemini-nano-banana-2.1` | One of `gemini-nano-banana-2.1`, `gemini-3-pro-image`, `gemini-3.1-flash-lite-image`, `gemini-3.1-flash-image` (aliases `flash` / `pro` / `lite`). |
 | `--aspect <r>` | string | `1:1` | 14 valid ratios: `1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1`. |
-| `--size <l>` | string | `1K` | One of `512, 1K, 2K, 4K`. **Uppercase K required.** `512` is flash-3.1 only. |
-| `--thinking <lvl>` | string | *(omitted → API default)* | One of `low, medium, high, minimal`. `minimal` is flash-3.1 only. |
+| `--size <l>` | string | `1K` | One of `512, 1K, 2K, 4K`. **Uppercase K required.** `512` is `gemini-3.1-flash-image` only. |
+| `--thinking <lvl>` | string | *(omitted → API default)* | One of `low, medium, high, minimal`; each model takes a subset (2.1: minimal/medium/high; Lite and 3.1 Flash: minimal/high; Pro: low/medium/high). |
 | `--seed <int>` | int | — | Integer seed. |
 | `--temperature <f>` | float | — | Finite float. |
 | `--style <slug>` | string (repeatable) | — | Preset from `styles.json` (72 presets × 10 categories). |

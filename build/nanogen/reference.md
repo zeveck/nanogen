@@ -438,12 +438,14 @@ SKILL.md's table.
 - **E_BAD_SIZE** — `--size` must be `512`, `1K`, `2K`, or `4K`
   with the literal capital `K`. `"1k"` (lowercase) is rejected
   so config drift doesn't silently fall through to the API.
-- **E_SIZE_MODEL_MISMATCH** — `512` is flash-3.1 only. The pro
-  model has no 512 option.
+- **E_SIZE_MODEL_MISMATCH** — `512` is `gemini-3.1-flash-image`
+  only. Nano Banana 2.1, Lite and Pro have no 512 option.
 - **E_BAD_THINKING** — `--thinking` must be `low`, `medium`,
   `high`, or `minimal`.
-- **E_THINKING_MODEL_MISMATCH** — `minimal` is flash-3.1 only.
-  Pro rejects `minimal`; it only knows `low`/`medium`/`high`.
+- **E_THINKING_MODEL_MISMATCH** — each model takes a subset:
+  Nano Banana 2.1 `minimal`/`medium`/`high`; Lite and 3.1 Flash
+  `minimal`/`high`; Pro `low`/`medium`/`high`. Checked against the
+  live API on 2026-11-06.
 - **E_BAD_SEED** — `--seed` must parse as an integer. Floats,
   NaN, and empty strings are rejected.
 - **E_BAD_TEMP** — `--temperature` must parse as a finite float.

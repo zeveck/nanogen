@@ -52,7 +52,7 @@ nanogen --prompt "a single red apple on a white marble table" \
 
 | | |
 |---|---|
-| Default model | `gemini-3.1-flash-image` |
+| Default model | `gemini-nano-banana-2.1` |
 | Default aspect | `1:1` |
 | Default size | `1K` |
 | Cost | $0.034 |
@@ -121,16 +121,16 @@ nanogen --prompt "a neon-lit Tokyo street scene, rainy night" \
         --output wallpaper.png
 ```
 
-Cheapest usable size (Flash-only):
+Cheapest usable size (`gemini-3.1-flash-image` only):
 
 ```bash
 nanogen --prompt "a stylised coffee mug icon" \
-        --size 512 --output icon.png
+        --model gemini-3.1-flash-image --size 512 --output icon.png
 ```
 
-| Size | Flash $/image | Pro $/image | Notes |
+| Size | 3.1 Flash $/image | Pro $/image | Notes |
 |---|---|---|---|
-| `512` | $0.022 | (not supported) | Cheapest; Flash only |
+| `512` | $0.022 | (not supported) | Cheapest; 3.1 Flash only |
 | `1K` | $0.034 | $0.134 | Default |
 | `2K` | $0.050 | $0.134 | Text-in-image works here |
 | `4K` | $0.076 | $0.24 | Biggest; use for wall art / prints |
@@ -175,7 +175,9 @@ done; wait
 
 `--thinking low|medium|high|minimal`. Higher = slower + more expensive
 (Gemini bills thinking tokens separately) but better at tricky layouts
-and legible text-in-image. `minimal` is Flash-only.
+and legible text-in-image. Each model takes a subset: Nano Banana 2.1
+(default) `minimal`/`medium`/`high`; Lite and 3.1 Flash `minimal`/`high`;
+Pro `low`/`medium`/`high`.
 
 ```bash
 # Default (thinking unset) — no thinkingConfig sent; API picks
@@ -186,14 +188,14 @@ nanogen --prompt "a vintage travel poster for Kyoto reading 'KYOTO 1952'" \
         --thinking high --size 2K \
         --output kyoto.png
 
-# Flash-only minimal — fastest/cheapest; simple prompts only
+# minimal — fastest; simple prompts only
 nanogen --prompt "a red dot on a white background" \
-        --thinking minimal --size 512 \
+        --thinking minimal \
         --output dot.png
 ```
 
 Cross-model rules the validator enforces:
-- `--thinking minimal` requires a Flash model
+- `--thinking` must be a level the model takes (see above)
 - `--size 512` requires `gemini-3.1-flash-image`
 
 ---

@@ -16,8 +16,8 @@ API.
 
 | Skill | Back end | Good fit | Tradeoffs |
 |-------|----------|----------|-----------|
-| [`imagegen`](https://github.com/zeveck/imagegen) | OpenAI `gpt-image-1` | Classic game assets, direct transparent PNG/WebP sprites and icons | Older OpenAI image model, legacy size set |
-| [`imagegen2`](https://github.com/zeveck/imagegen2) | OpenAI `gpt-image-2` | Current OpenAI image path, flexible sizes up to 4K-class outputs, high-fidelity edits | Transparent PNG sprites should use local chroma-key cleanup; true native alpha requires explicit `gpt-image-1.5` fallback |
+| [`imagegen`](https://github.com/zeveck/imagegen) (archived) | OpenAI `gpt-image-1` | Nothing now: OpenAI shut `gpt-image-1` down on 2026-10-23 | Use `imagegen2` instead |
+| [`imagegen2`](https://github.com/zeveck/imagegen2) | OpenAI GPT Image 2.6 (`gpt-image-2.6-flare` default) | Current OpenAI image path, flexible sizes up to 4K-class outputs, high-fidelity edits, native transparency with soft edges | Costs more per image than nanogen's default |
 | `nanogen` | Google Gemini / Nano Banana image models | Rich style catalog, natural-language edits, multi-image composition, multi-turn refinement, transparent sprites via built-in chroma-key (no native alpha) | Returns JPEG by default; transparent output is binary-alpha only — soft/fluffy edges will fringe |
 
 For sprite-sheet animation built on top of `imagegen2`, see
@@ -262,11 +262,13 @@ Get a key at <https://aistudio.google.com/app/apikey>. See
 
 | Alias | Model | 1K image cost | When |
 |---|---|---|---|
-| `flash` *(default)* | `gemini-3.1-flash-image` (Nano Banana 2) | **$0.067** | Most work — speed, batch, draft iteration |
-| `pro` | `gemini-3-pro-image` (Nano Banana Pro) | **$0.134** (2×) | Small quality edge on fringe-sensitive subjects (vector edges, fluffy fur, text) |
+| `flash` *(default)* | `gemini-nano-banana-2.1` (Nano Banana 2.1) | see Google's pricing | Most work. Google's replacement for Nano Banana 2; no 512 size |
+| `lite` | `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite) | see Google's pricing | Fastest drafts; weaker with several references and multi-turn edits |
+| `pro` | `gemini-3-pro-image` (Nano Banana Pro) | **$0.134** | Small quality edge on fringe-sensitive subjects (vector edges, fluffy fur, text) |
+| — | `gemini-3.1-flash-image` (Nano Banana 2) | $0.067 | Deprecated by Google on 2026-10-06 but still served; the only model with `--size 512` |
 
 Set `NANOGEN_MODEL=pro` in `.env` to switch your default, or `--model pro` per
-call. `nanogen --list-models` shows what your key can access.
+call. `NANOGEN_MODEL=gemini-3.1-flash-image` keeps the pre-2026.11.6 default. `nanogen --list-models` shows what your key can access.
 
 ---
 

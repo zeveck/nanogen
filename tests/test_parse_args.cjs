@@ -210,7 +210,7 @@ test("--help names the default model's own alias", () => {
   assert.equal(res.status, 0);
   const line = res.stdout.split("\n").find((l) => l.includes("--model <id|alias>"));
   assert.ok(line, "help must document --model");
-  assert.match(line, /Default: gemini-3\.1-flash-image \(alias: flash\)/);
+  assert.match(line, /Default: gemini-nano-banana-2\.1 \(alias: flash\)/);
 });
 
 test("-h alias prints help", () => {
@@ -286,6 +286,19 @@ test("rule 8: E_SIZE_MODEL_MISMATCH for --size 512 with non-flash-3.1 model", ()
   assertErrorJson(res, "E_SIZE_MODEL_MISMATCH");
 });
 
+test("rule 8: --size 512 is refused on the default Nano Banana 2.1 and Lite", () => {
+  for (const model of [undefined, "lite"]) {
+    const argv = ["--prompt", "X", "--output", "foo.png", "--size", "512", "--dry-run"];
+    if (model) argv.push("--model", model);
+    const res = runCLI(argv);
+    assertErrorJson(res, "E_SIZE_MODEL_MISMATCH");
+    assert.ok(res.stdout.includes("512 needs --model gemini-3.1-flash-image"), res.stdout);
+  }
+  const ok = runCLI(["--prompt", "X", "--output", "foo.png", "--model", "gemini-3.1-flash-image",
+    "--size", "512", "--dry-run"], { env: cleanEnv({ GEMINI_API_KEY: "" }) });
+  assert.equal(ok.status, 0, ok.stdout);
+});
+
 // Rule 9: E_BAD_THINKING
 test("rule 9: E_BAD_THINKING for unknown --thinking", () => {
   const res = runCLI([
@@ -305,6 +318,22 @@ test("rule 10: E_THINKING_MODEL_MISMATCH for --thinking minimal on non-flash", (
     "--dry-run",
   ]);
   assertErrorJson(res, "E_THINKING_MODEL_MISMATCH");
+});
+
+test("rule 10: thinking levels follow each model's limits", () => {
+  const run = (model, level) => {
+    const argv = ["--prompt", "X", "--output", "foo.png", "--thinking", level, "--dry-run"];
+    if (model) argv.push("--model", model);
+    return runCLI(argv, { env: cleanEnv({ GEMINI_API_KEY: "" }) });
+  };
+  // Refusals seen from the live API on 2026-11-06.
+  for (const [model, level] of [[undefined, "low"], ["lite", "medium"], ["gemini-3.1-flash-image", "medium"]]) {
+    assertErrorJson(run(model, level), "E_THINKING_MODEL_MISMATCH");
+  }
+  for (const [model, level] of [[undefined, "minimal"], [undefined, "medium"], ["lite", "minimal"], ["pro", "high"]]) {
+    const res = run(model, level);
+    assert.equal(res.status, 0, `${model} ${level}: ${res.stdout}`);
+  }
 });
 
 // Rule 11: E_BAD_SEED
@@ -446,7 +475,7 @@ test("--dry-run with styles, negative, safety, and image succeeds", () => {
     "--model", "gemini-3.1-flash-image",
     "--aspect", "16:9",
     "--size", "2K",
-    "--thinking", "medium",
+    "--thinking", "high",
     "--seed", "42",
     "--temperature", "0.7",
     "--style", "pixel-16bit",
@@ -487,8 +516,10 @@ test("model aliases + default resolve to GA ids in the request URL", () => {
     return m && m[1];
   };
   const cases = [
-    { model: undefined,            expect: "gemini-3.1-flash-image" }, // default
-    { model: "flash",              expect: "gemini-3.1-flash-image" },
+    { model: undefined,            expect: "gemini-nano-banana-2.1" }, // default
+    { model: "flash",              expect: "gemini-nano-banana-2.1" },
+    { model: "lite",               expect: "gemini-3.1-flash-lite-image" },
+    { model: "gemini-3.1-flash-image", expect: "gemini-3.1-flash-image" }, // deprecated, still served
     { model: "pro",                expect: "gemini-3-pro-image" },
     { model: "gemini-3-pro-image", expect: "gemini-3-pro-image" },     // full-name passthrough
   ];

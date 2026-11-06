@@ -8,7 +8,7 @@
 // Release version (CalVer YYYY.M.D). Keep in sync with package.json,
 // skills/.claude-plugin/plugin.json, and the first "## v" heading in CHANGELOG.md
 // (tests/test_version.cjs enforces this).
-const NANOGEN_VERSION = "2026.11.1.2";
+const NANOGEN_VERSION = "2026.11.6";
 
 const fs = require("fs");
 const path = require("path");
@@ -20,6 +20,8 @@ const magicBytes = require("./magicBytes.cjs");
 // ---------------------------------------------------------------------------
 
 const VALID_MODELS = [
+  "gemini-nano-banana-2.1",
+  "gemini-3.1-flash-lite-image",
   "gemini-3.1-flash-image",
   "gemini-3-pro-image",
 ];
@@ -29,17 +31,26 @@ const VALID_MODELS = [
 // Google ships a new image-gen model, update MODEL_ALIASES (and bump
 // VALID_MODELS) in one place; --model accepts either an alias or a full name.
 const MODEL_ALIASES = {
-  "pro":   "gemini-3-pro-image",     // Nano Banana Pro (GA)
-  "flash": "gemini-3.1-flash-image", // Nano Banana 2 (GA)
+  "pro":   "gemini-3-pro-image",          // Nano Banana Pro (GA)
+  "flash": "gemini-nano-banana-2.1",      // Nano Banana 2.1 (GA 2026-10-06)
+  "lite":  "gemini-3.1-flash-lite-image", // Nano Banana 2 Lite (GA)
 };
-// Default model = Nano Banana 2 (Flash). Flash is 2× cheaper than Pro at 1K
-// ($0.067 vs $0.134 / image).
-// Real-world image quality is comparable for most subjects; Pro shows a small
-// edge on fringe / vector / fluffy-subject chroma-key fidelity but the
-// visible difference is marginal. Users who want the Pro upgrade pass
-// --model pro per call or set NANOGEN_MODEL=pro in their .env.
-const DEFAULT_MODEL = "gemini-3.1-flash-image";
-const FLASH_MODEL = "gemini-3.1-flash-image";  // legacy --size 512 / --thinking minimal gate
+// Default model = Nano Banana 2.1, Google's replacement for Nano Banana 2
+// (gemini-3.1-flash-image, deprecated 2026-10-06 but still served). Pro
+// shows a small edge on fringe / vector / fluffy-subject chroma-key fidelity;
+// users who want it pass --model pro or set NANOGEN_MODEL=pro in their .env.
+// Lite is the fastest and cheapest, but Google says it is weaker with
+// several reference images and multi-turn edits.
+const DEFAULT_MODEL = "gemini-nano-banana-2.1";
+
+// Per-model limits the API enforces (checked live 2026-11-06). A model not
+// listed here accepts every size and thinking level nanogen knows.
+const MODEL_LIMITS = {
+  "gemini-nano-banana-2.1":      { sizes: ["1K", "2K", "4K"], thinking: ["minimal", "medium", "high"] },
+  "gemini-3.1-flash-lite-image": { sizes: ["1K", "2K", "4K"], thinking: ["minimal", "high"] },
+  "gemini-3.1-flash-image":      { thinking: ["minimal", "high"] },
+  "gemini-3-pro-image":          { sizes: ["1K", "2K", "4K"], thinking: ["low", "medium", "high"] },
+};
 
 // Resolve an alias to its full model name. Pass-through for full names.
 // Returns null for unknown aliases / non-VALID_MODELS names — caller emits
@@ -566,20 +577,22 @@ function validateArgs(args, stylesIndex) {
     return fail("E_BAD_SIZE",
       `--size "${size}" not in {${VALID_SIZES.join(",")}} (uppercase K required)`);
   }
-  // 8. --size 512 with non-flash-3.1 model
-  if (size === "512" && model !== FLASH_MODEL) {
+  // 8. --size the model doesn't offer (512 is gemini-3.1-flash-image only)
+  const limits = MODEL_LIMITS[model] || {};
+  if (limits.sizes && !limits.sizes.includes(size)) {
     return fail("E_SIZE_MODEL_MISMATCH",
-      `--size 512 only valid with --model ${FLASH_MODEL}`);
+      `--size ${size} not available on ${model}; it takes ${limits.sizes.join(", ")}` +
+      (size === "512" ? ". 512 needs --model gemini-3.1-flash-image" : ""));
   }
   // 9. --thinking not in valid set (only if set)
   if (args.thinking !== undefined && !VALID_THINKING.includes(args.thinking)) {
     return fail("E_BAD_THINKING",
       `--thinking "${args.thinking}" not in {${VALID_THINKING.join(",")}}`);
   }
-  // 10. --thinking minimal with non-flash model
-  if (args.thinking === "minimal" && model !== FLASH_MODEL) {
+  // 10. --thinking level the model doesn't offer
+  if (args.thinking !== undefined && limits.thinking && !limits.thinking.includes(args.thinking)) {
     return fail("E_THINKING_MODEL_MISMATCH",
-      `--thinking minimal only valid with --model ${FLASH_MODEL}`);
+      `--thinking ${args.thinking} not available on ${model}; it takes ${limits.thinking.join(", ")}`);
   }
   // 11. --seed not integer
   if (args.seed !== undefined) {
@@ -2679,10 +2692,12 @@ async function listModelsFlow() {
   }
   const models = allModels
     .filter((m) => {
-      // Only image-generation models — name or displayName has "image".
+      // Only image-generation models — name or displayName has "image" or "banana".
       const name = (m.name || "").toLowerCase();
       const dn = (m.displayName || "").toLowerCase();
-      return name.includes("image") || dn.includes("image");
+      // Nano Banana 2.1's id and display name have no "image" in them.
+      return name.includes("image") || dn.includes("image") ||
+        name.includes("banana") || dn.includes("banana");
     })
     .map((m) => {
       const fullName = (m.name || "").replace(/^models\//, "");

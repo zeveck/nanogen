@@ -30,7 +30,7 @@
       },
       "candidateCount": 1,
       "thinkingConfig": {
-        "thinkingLevel": "medium"
+        "thinkingLevel": "high"
       },
       "seed": 1337,
       "temperature": 0.5
